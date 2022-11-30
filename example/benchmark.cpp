@@ -27,5 +27,17 @@ BENCHMARK_MAIN {
         BENCHMARK_ADD("use_measure", use_measure);
     }
 
-    BENCHMARK_RUN("group1", "group2");
+    /*
+        run some groups:
+        BENCHMARK_RUN_GROUPS("group1", "group2");
+    */
+    /*
+        run all groups(you can't point out which group in cmd parameter):
+        BENCHMARK_RUN_ALL();
+    */
+    /*
+        run groups, you can send group names in cmdline. Eg:
+        ./benchmark group1
+    */
+    BENCHMARK_RUN();
 }

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <initializer_list>
 #include <optional>
+#include <map>
 
 #ifndef BENCHMARK_REPEAT_NUM
 #define BENCHMARK_REPEAT_NUM 1000
@@ -108,6 +109,27 @@ public:
         return *instance;
     }
 
+    void RunAll() {
+        for (auto it = groups_.begin(); it != groups_.end(); it++) {
+            doBenchmarkInGroup(it->second);
+            drawGroupSplitLine();
+        }
+    }
+
+    void RunByCmd(int argc, char** argv) {
+        if (argc == 1) {
+            RunAll();
+        } else {
+            for (int i = 1; i < argc; i++) {
+                auto it = groups_.find(argv[i]);
+                if (it != groups_.end()) {
+                    doBenchmarkInGroup(it->second);
+                    drawGroupSplitLine();
+                }
+            }
+        }
+    }
+
     template <typename... Names>
     void Run(Names... names) {
         doRun(names...);
@@ -130,18 +152,15 @@ public:
     }
 
 private:
-    std::unordered_map<std::string_view, Group> groups_;
+    std::map<std::string_view, Group> groups_;
     std::optional<Group> group_;
 
     template <typename Name, typename... Names>
     void doRun(Name name, Names... names) {
         auto it = groups_.find(name);
         if (it != groups_.end()) {
-            auto& group = it->second;
-            group.DoBenchmark();
-            std::cout << std::endl;
-            group.ShowResult();
-            std::cout << "--------------------------------" << std::endl;
+            doBenchmarkInGroup(it->second);
+            drawGroupSplitLine();
         }
         doRun(names...);
     }
@@ -149,23 +168,26 @@ private:
     void doRun(std::string_view name) {
         auto it = groups_.find(name);
         if (it != groups_.end()) {
-            auto& group = it->second;
-            group.DoBenchmark();
-            std::cout << std::endl;
-            group.ShowResult();
+            doBenchmarkInGroup(it->second);
         }
     }
 
     void doRun(const char* name) {
         auto it = groups_.find(name);
         if (it != groups_.end()) {
-            auto& group = it->second;
-            group.DoBenchmark();
-            std::cout << std::endl;
-            group.ShowResult();
+            doBenchmarkInGroup(it->second);
         }
     }
-    
+
+    void doBenchmarkInGroup(Group& group) {
+        group.DoBenchmark();
+        std::cout << std::endl;
+        group.ShowResult();
+    }
+
+    void drawGroupSplitLine() {
+        std::cout << "--------------------------------" << std::endl;
+    }
 };
 
 }
@@ -174,4 +196,6 @@ private:
 #define BENCHMARK_MAIN int main(int argc, char** argv)
 #define BENCHMARK_GROUP(name)  benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().BeginGroup(name);
 #define BENCHMARK_ADD(name, func) benchmark::BenchmarkMgr::Instance().AddUnit2CurrentGroup(benchmark::Unit(name, func));
-#define BENCHMARK_RUN(...) benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().Run(__VA_ARGS__);
+#define BENCHMARK_RUN_GROUPS(...) benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().Run(__VA_ARGS__);
+#define BENCHMARK_RUN_ALL() benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().RunAll();
+#define BENCHMARK_RUN() benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().RunByCmd(argc, argv);
