@@ -1,3 +1,8 @@
-add_executable(benchmark ./benchmark.cpp)
-target_include_directories(benchmark PRIVATE ../)
-target_compile_features(benchmark PRIVATE cxx_std_17)
+macro(AddExample NAME)
+    add_executable(${NAME} ${NAME}.cpp)
+    target_include_directories(${NAME} PRIVATE ../)
+    target_compile_features(${NAME} PRIVATE cxx_std_17)
+endmacro(AddExample)
+
+AddExample(benchmark)
+AddExample(log)
