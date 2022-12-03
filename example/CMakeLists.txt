@@ -6,3 +6,4 @@ endmacro(AddExample)
 
 AddExample(benchmark)
 AddExample(log)
+AddExample(cgmath)
