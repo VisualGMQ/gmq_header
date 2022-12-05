@@ -3,10 +3,12 @@
 #include <utility>
 #include <iostream>
 #include <cmath>
+#include <vector>
+#include <array>
 
 namespace cgmath {
 
-#define PI 3.14159265358979
+constexpr double PI = 3.14159265358979;
 
 // some math function
 
@@ -32,14 +34,17 @@ struct Vector: public VecMemberGenerator<T, AttrNum> {
 
     Vector() = default;
 
-    template <typename... Params>
-    Vector(const Params&... params) {
+    Vector(const std::initializer_list<T>& datas) {
         VecMemberGenerator<T, AttrNum>::setVec(this);
-        VecMemberGenerator<T, AttrNum>::initVec(params...);
+        VecMemberGenerator<T, AttrNum>::initVec(datas);
     }
 
     T data[AttrNum];
 };
+
+// disable Vector<T, 1>
+template <typename T>
+struct Vector<T, 1>: public VecMemberGenerator<T, 1> {};
 
 template <typename T>
 struct Vector<T, 2>: public VecMemberGenerator<T, 2> {
@@ -50,10 +55,9 @@ struct Vector<T, 2>: public VecMemberGenerator<T, 2> {
 
     Vector() = default;
 
-    template <typename... Params>
-    Vector(const Params&... params) {
+    Vector(const std::initializer_list<T>& datas) {
         VecMemberGenerator<T, 2>::setVec(this);
-        VecMemberGenerator<T, 2>::initVec(params...);
+        VecMemberGenerator<T, 2>::initVec(datas);
     }
 
     T Cross(const Vector& o) {
@@ -75,10 +79,9 @@ struct Vector<T, 3>: public VecMemberGenerator<T, 3> {
 
     Vector() = default;
 
-    template <typename... Params>
-    Vector(const Params&... params) {
+    Vector(const std::initializer_list<T>& datas) {
         VecMemberGenerator<T, 3>::setVec(this);
-        VecMemberGenerator<T, 3>::initVec(params...);
+        VecMemberGenerator<T, 3>::initVec(datas);
     }
 
     auto Cross(const Vector& o) {
@@ -100,10 +103,9 @@ struct Vector<T, 4>: public VecMemberGenerator<T, 4> {
 
     Vector() = default;
 
-    template <typename... Params>
-    Vector(const Params&... params) {
+    Vector(const std::initializer_list<T>& datas) {
         VecMemberGenerator<T, 4>::setVec(this);
-        VecMemberGenerator<T, 4>::initVec(params...);
+        VecMemberGenerator<T, 4>::initVec(datas);
     }
 
     union {
@@ -365,6 +367,14 @@ public:
         return !(*vec_ == o);
     }
 
+    const T& operator[](unsigned int idx) const {
+        return vec_->data[idx];
+    }
+
+     T& operator[](unsigned int idx) {
+        return vec_->data[idx];
+    }
+
 protected:
     VecT* vec_ = nullptr;
 
@@ -373,27 +383,173 @@ protected:
 
     void setVec(VecT* v) { vec_ = v; }
 
-    template <typename... Params>
-    void initVec(const Params&... params) {
-        static_assert(sizeof...(params) <= AttrNum);
-        doInit<0>(params...);
-    }
-
-private:
-    template <unsigned int idx, typename Param, typename... Params>
-    void doInit(const Param& param, Params&&... params) {
-        if (idx < AttrNum) {
-            vec_->data[idx] = param;
-            doInit<idx + 1>(params...);
+    void initVec(const std::initializer_list<T>& datas) {
+        auto it = datas.begin();
+        int i = 0;
+        while (it != datas.end() && i < AttrNum) {
+            vec_->data[i] = *it;
+            it++;
+            i++;
         }
-    }
 
-    template <unsigned int idx>
-    void doInit() {
-        for (int i = idx; i < AttrNum; i++) {
-            vec_->data[idx] = T{};
+        while (i < AttrNum) {
+            vec_->data[i] = T{};
+            i++;
         }
     }
 };
+
+// matrx, column first
+
+template <typename T, int Col, int Row>
+class Matrix final {
+public:
+    Matrix() {}
+
+    Matrix(const std::vector<Vector<T, Row>>& cols) {
+        for (int x = 0; x < Col; x++) {
+            for (int y = 0; y < Row; y++) {
+                Set(x, y, cols[x].data[y]);
+            }
+        }
+    }
+
+    Matrix(const std::initializer_list<T>& datas) {
+        auto it = datas.begin();
+        int i = 0;
+        while (it != datas.end() && i < Col * Row) {
+            int x = i % Col,
+                y = i / Col;
+            Set(x, y, *it);
+            i++;
+            it++;
+        }
+    }
+
+    void Set(int x, int y, const T& value) {
+        data_[y + x * Row] = value;
+    }
+
+    const T& Get(int x, int y) const {
+        return data_[y + x * Row];
+    }
+
+     T& Get(int x, int y) {
+        return data_[y + x * Row];
+    }
+
+    constexpr int W() const { return Col; }
+    constexpr int H() const { return Row; }
+
+    Matrix operator*(const Matrix& o) const {
+        Matrix matrix;
+        for (int x = 0; x < Col; x++) {
+            for (int y = 0; y < Row; y++) {
+                matrix.Set(x, y, Get(x, y) * o.Get(x, y));
+            }
+        }
+        return matrix;
+    }
+
+    Matrix operator/(const Matrix& o) const {
+        Matrix matrix;
+        for (int x = 0; x < Col; x++) {
+            for (int y = 0; y < Row; y++) {
+                matrix.Set(x, y, Get(x, y) / o.Get(x, y));
+            }
+        }
+        return matrix;
+    }
+
+    Matrix operator+(const Matrix& o) const {
+        Matrix matrix;
+        for (int x = 0; x < Col; x++) {
+            for (int y = 0; y < Row; y++) {
+                matrix.Set(x, y, Get(x, y) + o.Get(x, y));
+            }
+        }
+        return matrix;
+    }
+
+    Matrix operator-(const Matrix& o) const {
+        Matrix matrix;
+        for (int x = 0; x < Col; x++) {
+            for (int y = 0; y < Row; y++) {
+                matrix.Set(x, y, Get(x, y) - o.Get(x, y));
+            }
+        }
+        return matrix;
+    }
+
+    template <typename U, int Col2>
+    auto Mul(const Matrix<U, Col, Col2>& m) const {
+        return ::cgmath::Mul(*this, m);
+    }
+
+private:
+    T data_[Col * Row];
+};
+
+template <typename T, typename U, int Col, int Row>
+auto operator*(const Matrix<T, Col, Row>& m, const U& scalar)  {
+    Matrix<std::common_type_t<T, U>, Col, Row> matrix;
+    for (int x = 0; x < Col; x++) {
+        for (int y = 0; y < Row; y++) {
+            matrix.Set(x, y, m.Get(x, y) * scalar);
+        }
+    }
+    return matrix;
+}
+
+template <typename T, typename U, int Col, int Row>
+auto operator*(const U& scalar, const Matrix<T, Col, Row>& m)  {
+    return m * scalar;
+}
+
+template <typename T, typename U, int Common, int Row, int Col>
+auto Mul(const Matrix<T, Common, Row>& m1, const Matrix<U, Col, Common>& m2) {
+    Matrix<std::common_type_t<T, U>, Col, Row> result;
+    for (int i = 0; i < Row; i++) {
+        for (int j = 0; j < Col; j++) {
+            T sum = T{};
+            for (int k = 0; k < Common; k++) {
+                sum += m1.Get(k, i) * m2.Get(j, k);
+            }
+            result.Set(j, i, sum);
+        }
+    }
+    return result;
+}
+
+template <typename T, typename U, int Row, int Col>
+auto Mul(const Matrix<T, Col, Row>& m, const Vector<U, Col>& v) {
+    Vector<std::common_type_t<T, U>, Row> result;
+    for (int i = 0; i < Row; i++) {
+        T sum = T{};
+        for (int j = 0; j < Col; j++) {
+            sum += m.Get(j, i) * v.data[j];
+        }
+        result.data[i] = sum;
+    }
+    return result;
+}
+
+using Mat22 = Matrix<float, 2, 2>;
+using Mat33 = Matrix<float, 3, 3>;
+using Mat44 = Matrix<float, 4, 4>;
+
+template <typename T, int Col, int Row>
+std::ostream& operator<<(std::ostream& o, const Matrix<T, Col, Row>& m) {
+    o << "[" << std::endl;
+    for (int y = 0; y < Row; y++) {
+        for (int x = 0; x < Col; x++) {
+            o << m.Get(x, y) << "\t";
+        }
+        std::cout << std::endl;
+    }
+    o << "]";
+
+    return o;
+}
 
 }
