@@ -36,7 +36,7 @@ public:
     void operator()(BenchmarkFunc func) const {
         auto begin = std::chrono::steady_clock::now();
         if (func) {
-            for (int i = 0; i < BENCHMARK_REPEAT_NUM; i++) {
+            for (long long i = 0; i < BENCHMARK_REPEAT_NUM; i++) {
                 (void)func();
             }
         }

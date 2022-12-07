@@ -6,6 +6,11 @@
 #include <vector>
 #include <array>
 
+// you can open SSE if you want to use SIMD
+#ifdef USE_SIMD
+#include "nmmintrin.h"
+#endif
+
 namespace cgmath {
 
 constexpr double PI = 3.14159265358979;
@@ -26,7 +31,7 @@ template <typename T, unsigned int AttrNum>
 class VecMemberGenerator;
 
 template <typename T, unsigned int AttrNum>
-struct Vector: public VecMemberGenerator<T, AttrNum> {
+struct Vector final: public VecMemberGenerator<T, AttrNum> {
     Vector(const Vector& o) {
         VecMemberGenerator<T, 2>::setVec(this);
         *this = o;
@@ -44,10 +49,10 @@ struct Vector: public VecMemberGenerator<T, AttrNum> {
 
 // disable Vector<T, 1>
 template <typename T>
-struct Vector<T, 1>: public VecMemberGenerator<T, 1> {};
+struct Vector<T, 1> final: public VecMemberGenerator<T, 1> {};
 
 template <typename T>
-struct Vector<T, 2>: public VecMemberGenerator<T, 2> {
+struct Vector<T, 2> final: public VecMemberGenerator<T, 2> {
     Vector(const Vector& o) {
         VecMemberGenerator<T, 2>::setVec(this);
         *this = o;
@@ -71,7 +76,7 @@ struct Vector<T, 2>: public VecMemberGenerator<T, 2> {
 };
 
 template <typename T>
-struct Vector<T, 3>: public VecMemberGenerator<T, 3> {
+struct Vector<T, 3> final: public VecMemberGenerator<T, 3> {
     Vector(const Vector& o) {
         VecMemberGenerator<T, 3>::setVec(this);
         *this = o;
@@ -95,7 +100,7 @@ struct Vector<T, 3>: public VecMemberGenerator<T, 3> {
 };
 
 template <typename T>
-struct Vector<T, 4>: public VecMemberGenerator<T, 4> {
+struct Vector<T, 4> final: public VecMemberGenerator<T, 4> {
     Vector(const Vector& o) {
         VecMemberGenerator<T, 4>::setVec(this);
         *this = o;
@@ -113,6 +118,136 @@ struct Vector<T, 4>: public VecMemberGenerator<T, 4> {
         struct { T x, y, z, w; };
     };
 };
+
+// some full specialization for SIMD
+
+#ifdef USE_SIMD
+
+template <>
+struct Vector<float, 4> final {
+public:
+    Vector(float x, float y, float z, float w) {
+        data_ = _mm_setr_ps(x, y, z, w);
+    }
+
+    Vector operator+(const Vector& oth) const {
+        return Vector{_mm_add_ps(data_, oth.data_)};
+    }
+
+    Vector operator-(const Vector& oth) const {
+        return Vector{_mm_sub_ps(data_, oth.data_)};
+    }
+
+    Vector operator*(const Vector& oth) const {
+        return Vector{_mm_mul_ps(data_, oth.data_)};
+    }
+
+    Vector operator/(const Vector& oth) const {
+        return Vector{_mm_div_ps(data_, oth.data_)};
+    }
+
+    Vector& operator+=(const Vector& oth) {
+        *this = *this + oth;
+        return *this;
+    }
+
+    Vector& operator-=(const Vector& oth) {
+        *this = *this - oth;
+        return *this;
+    }
+
+    Vector& operator*=(const Vector& oth) {
+        *this = *this * oth;
+        return *this;
+    }
+
+    Vector& operator*=(float value) {
+        *this = *this * value;
+        return *this;
+    }
+
+    Vector& operator/=(const Vector& oth) {
+        *this = *this / oth;
+        return *this;
+    }
+
+    Vector& operator/=(float value) {
+        *this = *this / value;
+        return *this;
+    }
+
+    Vector operator*(float value) const {
+        return *this * Vector(value, value, value, value);
+    }
+
+    Vector operator/(float value) const {
+        return *this / Vector(value, value, value, value);
+    }
+
+    float Dot(const Vector& oth) const {
+        return ::cgmath::Dot(*this, oth);
+    }
+
+    float x() const {
+        return _mm_cvtss_f32(data_);
+    }
+
+    float y() const {
+        float p[4];
+        _mm_store_ps(p, data_);
+        return p[1];
+    }
+
+    float z() const {
+        float p[4];
+        _mm_store_ps(p, data_);
+        return p[2];
+    }
+
+    float w() const {
+        float p[4];
+        _mm_store_ps(p, data_);
+        return p[3];
+    }
+
+    void Print(std::ostream& o) const {
+        float p[4];
+        _mm_store_ps(p, data_);
+        o << "Vec4(" << p[0] << ", " << p[1] << ", " << p[2] << ", " << p[3] << ")";
+    }
+
+    bool operator==(const Vector& o) const {
+        return (_mm_movemask_ps(_mm_cmpeq_ps(data_, o.data_)) & 15) == 15;
+    }
+
+    bool operator!=(const Vector& o) const {
+        return !(*this == o);
+    }
+
+private:
+    __m128 data_;
+
+    friend float Dot(const Vector<float, 4>& lhs, const Vector<float, 4>& rhs);
+
+    explicit Vector(__m128 data): data_(data) {}
+};
+
+Vector<float, 4> operator*(float value, const Vector<float, 4>& v) {
+    return v * Vector<float, 4>(value, value, value, value);
+}
+
+inline float Dot(const Vector<float, 4>& lhs, const Vector<float, 4>& rhs) {
+    return _mm_cvtss_f32(_mm_dp_ps(lhs.data_, rhs.data_, 0xFF));
+}
+
+inline std::ostream& operator<<(std::ostream& o, const Vector<float, 4>& v) {
+    v.Print(o);
+    return o;
+}
+
+#endif
+
+// some types
 
 #ifndef VECTOR_DATA_TYPE
 #define VECTOR_DATA_TYPE float

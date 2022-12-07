@@ -1,9 +1,0 @@
-macro(AddExample NAME)
-    add_executable(${NAME} ${NAME}.cpp)
-    target_include_directories(${NAME} PRIVATE ../)
-    target_compile_features(${NAME} PRIVATE cxx_std_17)
-endmacro(AddExample)
-
-AddExample(benchmark)
-AddExample(log)
-AddExample(cgmath)

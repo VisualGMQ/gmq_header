@@ -5,4 +5,5 @@ project(
     LANGUAGES CXX
 )
 
-add_subdirectory(example)
+enable_testing()
+add_subdirectory(bins)
