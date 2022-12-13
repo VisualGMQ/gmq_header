@@ -69,10 +69,12 @@ struct Vector<T, 2> final: public VecMemberGenerator<T, 2> {
         return ::cgmath::Cross(*this, o);
     }
 
-    union {
-        T data[2];
-        struct { T x, y; };
-    };
+    T x() const { return data[0]; }
+    T y() const { return data[1]; }
+    void x(const T& value) { data[0] = value; }
+    void y(const T& value) { data[1] = value; }
+
+    T data[2];
 };
 
 template <typename T>
@@ -93,10 +95,14 @@ struct Vector<T, 3> final: public VecMemberGenerator<T, 3> {
         return ::cgmath::Cross(*this, o);
     }
 
-    union {
-        T data[3];
-        struct { T x, y, z; };
-    };
+    T x() const { return data[0]; }
+    T y() const { return data[1]; }
+    T z() const { return data[2]; }
+    void x(const T& value) { data[0] = value; }
+    void y(const T& value) { data[1] = value; }
+    void z(const T& value) { data[2] = value; }
+
+    T data[3];
 };
 
 template <typename T>
@@ -113,10 +119,16 @@ struct Vector<T, 4> final: public VecMemberGenerator<T, 4> {
         VecMemberGenerator<T, 4>::initVec(datas);
     }
 
-    union {
-        T data[4];
-        struct { T x, y, z, w; };
-    };
+    T x() const { return data[0]; }
+    T y() const { return data[1]; }
+    T z() const { return data[2]; }
+    T w() const { return data[3]; }
+    void x(const T& value) { data[0] = value; }
+    void y(const T& value) { data[1] = value; }
+    void z(const T& value) { data[2] = value; }
+    void w(const T& value) { data[3] = value; }
+
+    T data[4];
 };
 
 // some full specialization for SIMD
@@ -193,25 +205,25 @@ public:
     }
 
     float y() const {
-        float p[4];
+        alignas(32) float p[4];
         _mm_store_ps(p, data_);
         return p[1];
     }
 
     float z() const {
-        float p[4];
+        alignas(32) float p[4];
         _mm_store_ps(p, data_);
         return p[2];
     }
 
     float w() const {
-        float p[4];
+        alignas(32) float p[4];
         _mm_store_ps(p, data_);
         return p[3];
     }
 
     void Print(std::ostream& o) const {
-        float p[4];
+        alignas(32) float p[4];
         _mm_store_ps(p, data_);
         o << "Vec4(" << p[0] << ", " << p[1] << ", " << p[2] << ", " << p[3] << ")";
     }
@@ -686,5 +698,146 @@ std::ostream& operator<<(std::ostream& o, const Matrix<T, Col, Row>& m) {
 
     return o;
 }
+
+#ifdef USE_SIMD
+
+template <>
+class Matrix<float, 4, 4> final {
+public:
+    Matrix() {}
+
+    Matrix(const std::vector<Vector<float, 4>>& cols) {
+        for (int i = 0; i < 4; i++) {
+            Set(i, 0, cols[i].x());
+            Set(i, 1, cols[i].y());
+            Set(i, 2, cols[i].z());
+            Set(i, 3, cols[i].w());
+        }
+    }
+
+    Matrix(const std::initializer_list<float>& datas) {
+        auto it = datas.begin();
+        int i = 0;
+        while (it != datas.end() && i < 4 * 4) {
+            int x = i % 4,
+                y = i / 4;
+            Set(x, y, *it);
+            i++;
+            it++;
+        }
+    }
+
+    void Set(int x, int y, const float& value) {
+        datas_[y + x * 4] = value;
+    }
+
+    const float& Get(int x, int y) const {
+        return datas_[y + x * 4];
+    }
+
+    float& Get(int x, int y) {
+        return datas_[y + x * 4];
+    }
+
+    constexpr int W() const { return 4; }
+    constexpr int H() const { return 4; }
+
+    Matrix operator+(const Matrix& o) const {
+        Matrix matrix;
+        auto simd1 = array2Simd();
+        auto simd2 = o.array2Simd();
+        std::array<__m128, 4> result;
+        for (int i = 0; i < 4; i++) {
+            result[i] = _mm_add_ps(simd1[i], simd2[i]);
+        }
+        matrix.simd2Array(result);
+        return matrix;
+    }
+
+    Matrix operator-(const Matrix& o) const {
+        Matrix matrix;
+        auto simd1 = array2Simd();
+        auto simd2 = o.array2Simd();
+        std::array<__m128, 4> result;
+        for (int i = 0; i < 4; i++) {
+            result[i] = _mm_sub_ps(simd1[i], simd2[i]);
+        }
+        matrix.simd2Array(result);
+        return matrix;
+    }
+
+    Matrix operator*(const Matrix& o) const {
+        Matrix matrix;
+        auto simd1 = array2Simd();
+        auto simd2 = o.array2Simd();
+        std::array<__m128, 4> result;
+        for (int i = 0; i < 4; i++) {
+            result[i] = _mm_mul_ps(simd1[i], simd2[i]);
+        }
+        matrix.simd2Array(result);
+        return matrix;
+    }
+
+    Matrix operator/(const Matrix& o) const {
+        Matrix matrix;
+        auto simd1 = array2Simd();
+        auto simd2 = o.array2Simd();
+        std::array<__m128, 4> result;
+        for (int i = 0; i < 4; i++) {
+            result[i] = _mm_div_ps(simd1[i], simd2[i]);
+        }
+        matrix.simd2Array(result);
+        return matrix;
+    }
+
+    Matrix& operator+=(const Matrix& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    Matrix& operator-=(const Matrix& o) {
+        *this = *this - o;
+        return *this;
+    }
+
+    Matrix& operator*=(const Matrix& o) {
+        *this = *this * o;
+        return *this;
+    }
+
+    Matrix& operator/=(const Matrix& o) {
+        *this = *this / o;
+        return *this;
+    }
+
+    template <int Col2>
+    auto Mul(const Matrix& m) const {
+        return ::cgmath::Mul(*this, m);
+    }
+
+private:
+    std::array<float, 4 * 4> datas_;
+
+    void simd2Array(const std::array<__m128, 4>& simds) {
+        for (int i = 0; i < 4; i++) {
+            _mm_store_ps(datas_.data() + i * 4, simds[i]);
+        }
+    }
+
+    std::array<__m128, 4> array2Simd() const {
+        std::array<__m128, 4> result;
+        for (int i = 0; i < 4; i++) {
+            result[i] = _mm_setr_ps(datas_[i * 4], datas_[i * 4 + 1], datas_[i * 4 + 2], datas_[i * 4 + 3]);
+        }
+        return result;
+    }
+};
+
+
+inline Matrix<float, 4, 4> Mul(const Matrix<float, 4, 4>& m1, const Matrix<float, 4, 4>& m2) {
+    
+}
+
+#endif
 
 }
