@@ -10,10 +10,14 @@
 namespace ecs {
 
 struct Resource {
+    Resource() = default;
+    Resource(const Resource&) = default;
     virtual ~Resource() = default;
 };
 
 struct Component {
+    Component() = default;
+    Component(const Component&) = default;
     virtual ~Component() = default;
 };
 
@@ -37,8 +41,45 @@ struct IDGenerator final {
     }
 };
 
-using ComponentContainer = std::unordered_map<uint32_t, std::unique_ptr<Component>>;
-using ResourceContainer = std::unordered_map<uint32_t, std::unique_ptr<Resource>>;
+template <typename T>
+class ObjectPool {
+public:
+    using Elem = std::unique_ptr<T>;
+
+    static ObjectPool& Instance() {
+        static ObjectPool instance;
+        return instance;
+    }
+    
+    template <typename... Args>
+    T* New(Args&&... args) {
+        if (cache_.empty()) {
+            datas_.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
+        } else {
+            Elem elem = std::move(cache_.back());
+            cache_.pop_back();
+            new (elem.get()) T(std::forward<Args>(args)...);
+            datas_.push_back(std::move(elem));
+        }
+        return datas_.back().get();
+    }
+
+    void Delete(T* elem) {
+        if (auto it = std::find_if(datas_.begin(), datas_.end(),
+                                   [&](const Elem& e) { return e.get() == elem; });
+            it != datas_.end()) {
+            cache_.push_back(std::move(*it));
+            datas_.erase(it);
+        }
+    }
+
+private:
+    std::vector<Elem> datas_;
+    std::vector<Elem> cache_;
+};
+
+using ComponentContainer = std::unordered_map<uint32_t, Component*>;
+using ResourceContainer = std::unordered_map<uint32_t, Resource*>;
 using Entity = uint32_t;
 using EntityContainer = std::unordered_map<Entity, ComponentContainer>;
 
@@ -132,7 +173,7 @@ private:
         bool addComponentsRecur(ResultT& result, ComponentContainer& components) {
             auto idx = IndexGetter<Component>::Get<T>();
             if (auto it = components.find(idx); it != components.end()) {
-                std::get<T*>(result.datas_) = static_cast<T*>(it->second.get());
+                std::get<T*>(result.datas_) = static_cast<T*>(it->second);
                 if constexpr (sizeof...(Remains) != 0) {
                     return addComponentsRecur<Remains...>(result, components);
                 } else {
@@ -196,13 +237,15 @@ private:
 
     template <typename T, typename... Args>
     void saveSpawnComponents(ComponentContainer& container, T&& t, Args&&... args) {
-        container[IndexGetter<Component>::Get<T>()] = std::unique_ptr<T>(new T(std::forward<T>(t)));
+        static_assert(std::is_base_of_v<Component, T>, "your component must inherit from ecs::Component");
+        container[IndexGetter<Component>::Get<T>()] = ObjectPool<T>::Instance().New(std::forward<T>(t));
         saveSpawnComponents<Args...>(container, std::forward<Args>(args)...);
     }
 
     template <typename T, typename... Args>
     void saveSpawnComponents(ComponentContainer& container, T&& t) {
-        container[IndexGetter<Component>::Get<T>()] = std::unique_ptr<T>(new T(std::forward<T>(t)));
+        static_assert(std::is_base_of_v<Component, T>, "your component must inherit from ecs::Component");
+        container[IndexGetter<Component>::Get<T>()] = ObjectPool<T>::Instance().New(std::forward<T>(t));
     }
 };
 
@@ -214,7 +257,7 @@ public:
     T* Get() {
         auto index = IndexGetter<Resources>::Get<T>();
         if (auto it = storage_.resources_.find(index); it != storage_.resources_.end()) {
-            return static_cast<T*>(it->second.get());
+            return static_cast<T*>(it->second);
         }
         return nullptr;
     }
@@ -255,7 +298,7 @@ Storage& Storage::SetResource(Args&&... args) {
     static_assert(std::is_base_of_v<Resource, T>, "your resource must inherit from ecs::Resource");
     auto index = IndexGetter<Resources>::Get<T>();
     assert(("resource already exists", resources_.find(index) == resources_.end()));
-    resources_[index] = std::unique_ptr<T>(new T(std::forward(args)...));
+    resources_[index] = ObjectPool<T>::Instance().New(std::forward(args)...);
     return *this;
 }
 
