@@ -6,6 +6,8 @@
 #include <memory>
 #include <functional>
 #include <cassert>
+#include <set>
+#include <optional>
 
 namespace ecs {
 
@@ -90,24 +92,64 @@ class Resources;
 using StartSystem = std::function<void(Commands&)>;
 using UpdateSystem = std::function<void(Commands&, Queryer&, Resources&)>;
 
-class Storage final {
+class ComponentEntityRelation final {
+public:
+    static void Add(unsigned int ComponentID, Entity entity) {
+        if (auto it = entityMapper_.find(ComponentID); it != entityMapper_.end()) {
+            entityMapper_[ComponentID] = {};
+        }
+        auto& mapper = entityMapper_[ComponentID];
+        mapper.resize(entity + 1);
+        mapper[entity] = true;
+    }
+
+    static void Remove(unsigned int ComponentID, Entity entity) {
+        entityMapper_[ComponentID][entity] = false;
+    }
+
+    static void Clear(unsigned int ComponentID) {
+        entityMapper_[ComponentID].clear();
+    }
+
+    static bool Has(unsigned int ComponentID, Entity entity) {
+        auto it = entityMapper_.find(ComponentID);
+        if (it == entityMapper_.end()) {
+            return false;
+        }
+        return it->second.size() >= entity && it->second[entity];
+    }
+
+    static std::vector<bool>& GetContainer(unsigned int ComponentID) {
+        if (auto it = entityMapper_.find(ComponentID); it != entityMapper_.end()) {
+            return it->second;
+        } else {
+            entityMapper_[ComponentID] = {};
+            return entityMapper_[ComponentID];
+        }
+    }
+
+private:
+    inline static std::unordered_map<unsigned int, std::vector<bool>> entityMapper_;
+};
+
+class World final {
 public:
     friend class Resources;
     friend class Commands;
     friend class Queryer;
 
-    Storage& AddStartSystem(StartSystem sys) {
+    World& AddStartSystem(StartSystem sys) {
         startSystems_.push_back(sys);
         return *this;
     }
 
-    Storage& AddUpdateSystem(UpdateSystem sys) {
+    World& AddUpdateSystem(UpdateSystem sys) {
         updateSystems_.push_back(sys);
         return *this;
     }
 
     template <typename T, typename... Args>
-    Storage& SetResource(Args&&... args);
+    World& SetResource(Args&&... args);
 
     void Startup();
     void Update();
@@ -135,60 +177,56 @@ public:
         std::tuple<Components...> datas_;
     };
 
-    Queryer(Storage& storage): storage_(storage) {}
+    Queryer(World& storage): storage_(storage) {}
 
     template <typename... Args>
     using ResultType = Result<Args*...>;
 
     template <typename... Args>
     std::vector<ResultType<Args...>> Query() {
-        std::vector<ResultType<Args...>> results;
-        for (auto it = storage_.entities_.begin(); it != storage_.entities_.end(); it++) {
-            ResultType<Args...> result;
-            if (addSatisfiedComponents<Args...>(result, it->second)) {
+        return findAllResult<Args...>();
+    }
+
+private:
+    World& storage_;
+
+    template <typename T, typename... Args>
+    std::vector<ResultType<T, Args...>> findAllResult() {
+        std::vector<ResultType<T, Args...>> results;
+        auto& container = ComponentEntityRelation::GetContainer(IndexGetter<Component>::Get<T>());
+        for (auto entity : container) {
+            ResultType<T, Args...> result;
+            CheckEntityHelper<T, Args...> helper;
+            auto& componentContainer = storage_.entities_[entity];
+            if (helper.template CheckSatisfiedEntity<Args...>(componentContainer, result)) {
+                std::get<T*>(result.datas_) = (T*)componentContainer[IndexGetter<Component>::Get<T>()];
                 results.push_back(std::move(result));
             }
         }
         return results;
     }
 
-private:
-    Storage& storage_;
-
-    template <typename... Args>
-    bool addSatisfiedComponents(ResultType<Args...>& result, ComponentContainer& components) {
-        AddComponentsHelper<Args...> helper;
-        return helper(result, components);
-    }
-
-    template <typename... Args>
-    struct AddComponentsHelper final {
-        using ResultT = ResultType<Args...>;
-
-        bool operator()(ResultT& result, ComponentContainer& components) {
-            return addComponentsRecur<Args...>(result, components);
-        }
-
-        template <typename T, typename... Remains>
-        bool addComponentsRecur(ResultT& result, ComponentContainer& components) {
-            auto idx = IndexGetter<Component>::Get<T>();
-            if (auto it = components.find(idx); it != components.end()) {
-                std::get<T*>(result.datas_) = static_cast<T*>(it->second);
-                if constexpr (sizeof...(Remains) != 0) {
-                    return addComponentsRecur<Remains...>(result, components);
-                } else {
+    template <typename... Components>
+    struct CheckEntityHelper final {
+        template <typename T, typename... Args>
+        bool CheckSatisfiedEntity(ComponentContainer& container, ResultType<Components...>& result) {
+            if (auto it = container.find(IndexGetter<Component>::Get<T>()); it == container.end()) {
+                return false;
+            } else {
+                std::get<T*>(result.datas_) = (T*)it->second;
+                if constexpr (sizeof...(Args) == 0) {
                     return true;
+                } else {
+                    return CheckSatisfiedEntity<Args...>(container, result);
                 }
             }
-            return false;
         }
     };
-
 };
 
 class Commands final {
 public:
-    Commands(Storage& storage): storage_(storage) {}
+    Commands(World& storage): storage_(storage) {}
 
     Commands(Commands&& other): storage_(other.storage_) {
         newResources_ = std::move(other.newResources_);
@@ -203,6 +241,8 @@ public:
         newEntities_[id] = std::move(container);
         return *this;
     }
+
+    // TODO: finish RemoveComponent and DestroyEntity
 
     template <typename T, typename... Args>
     Commands& SetResource(Args&&... args) {
@@ -221,6 +261,9 @@ public:
 
     void Execute() {
         for (auto& entity : newEntities_) {
+            for (auto [id, _] : entity.second) {
+                ComponentEntityRelation::Add(id, entity.first);
+            }
             storage_.entities_.emplace(entity.first, std::move(entity.second));
         }
         newEntities_.clear();
@@ -231,7 +274,7 @@ public:
     }
 
 private:
-    Storage& storage_;
+    World& storage_;
     ResourceContainer newResources_;
     EntityContainer newEntities_;
 
@@ -251,7 +294,7 @@ private:
 
 class Resources final {
 public:
-    Resources(Storage& storage): storage_(storage) {}
+    Resources(World& storage): storage_(storage) {}
 
     template <typename T>
     T* Get() {
@@ -263,13 +306,13 @@ public:
     }
 
 private:
-    Storage& storage_;
+    World& storage_;
 };
 
 
 /********* implementation of Storage ************/
 
-void Storage::Startup() {
+void World::Startup() {
     for (auto& system : startSystems_) {
         Commands cmds(*this);
         system(cmds);
@@ -277,7 +320,7 @@ void Storage::Startup() {
     }
 }
 
-void Storage::Update() {
+void World::Update() {
     static std::vector<Commands> commandList;
     commandList.clear();
     for (auto& system : updateSystems_) {
@@ -294,7 +337,7 @@ void Storage::Update() {
 }
 
 template <typename T, typename... Args>
-Storage& Storage::SetResource(Args&&... args) {
+World& World::SetResource(Args&&... args) {
     static_assert(std::is_base_of_v<Resource, T>, "your resource must inherit from ecs::Resource");
     auto index = IndexGetter<Resources>::Get<T>();
     assert(("resource already exists", resources_.find(index) == resources_.end()));
