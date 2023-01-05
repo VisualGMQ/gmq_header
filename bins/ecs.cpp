@@ -39,7 +39,7 @@ void UpdateSystem(ecs::Commands& cmds, ecs::Queryer& queryer, ecs::Resources& re
 }
 
 int main() {
-    ecs::Storage storage;
+    ecs::World storage;
     storage.AddStartSystem(StartupSystem)
            .AddUpdateSystem(UpdateSystem)
            .SetResource<GameState>();
