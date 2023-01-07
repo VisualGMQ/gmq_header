@@ -1,51 +1,69 @@
 #include "ecs.hpp"
-
+#include <string>
 #include <iostream>
 
-struct GameState: public ecs::Resource {
-    int count = 1;
-};
+using namespace ecs;
 
-struct Name: public ecs::Component {
+struct Name {
     std::string name;
-
-    Name(const std::string& name): name(name) {}
 };
 
-struct ID: public ecs::Component {
-    uint32_t id;
-
-    ID(uint32_t id): id(id) {}
+struct ID {
+    int id;
 };
 
-void StartupSystem(ecs::Commands& cmds) {
-    std::cout << "startup" << std::endl;
-    cmds.Spawn(Name("ECSMan1"), ID(1))
-        .Spawn(Name("ECSMan2"), ID(2));
+struct Timer {
+    int t;
+};
+
+void StartUpSystem(Commands& command) {
+    command.Spawn<Name>(Name{ "person1" })
+           .Spawn<Name, ID>(Name{"person2"}, ID{1})
+           .Spawn<ID>(ID{2});
 }
 
-void UpdateSystem(ecs::Commands& cmds, ecs::Queryer& queryer, ecs::Resources& resources) {
-    std::cout << "hello" << std::endl;
-    auto state = resources.Get<GameState>();
-    assert(state);
-    std::cout << state->count << std::endl;
-
-    auto results = queryer.Query<Name, ID>();
-    for (auto& result : results) {
-        auto name = result.Get<Name>();
-        auto id = result.Get<ID>();
-        std::cout << result.Get<Name>()->name << "'s id = " << result.Get<ID>()->id << std::endl;
+void EchoNameSystem(Commands& command, Queryer query, Resources resources) {
+    std::cout << "echo name system" << std::endl;
+    std::vector<Entity> entities = query.Query<Name>();
+    for (auto entity : entities) {
+        std::cout << query.Get<Name>(entity).name << std::endl;
     }
 }
 
+void EchoNameAndIDSystem(Commands& command, Queryer query, Resources resources) {
+    std::cout << "echo name and id system" << std::endl;
+    std::vector<Entity> entities = query.Query<Name, ID>();
+    for (auto entity : entities) {
+        std::cout << query.Get<Name>(entity).name << ", " << query.Get<ID>(entity).id << std::endl;
+    }
+}
+
+void EchoIDSystem(Commands& command, Queryer query, Resources resources) {
+    std::cout << "echo id system" << std::endl;
+    std::vector<Entity> entities = query.Query<ID>();
+    for (auto entity : entities) {
+        std::cout << query.Get<ID>(entity).id << std::endl;
+    }
+}
+
+void EchoTimeSystem(Commands& command, Queryer query, Resources resources) {
+    std::cout << "echo time system" << std::endl;
+    std::cout << resources.Get<Timer>().t << std::endl;
+}
+
 int main() {
-    ecs::World storage;
-    storage.AddStartSystem(StartupSystem)
-           .AddUpdateSystem(UpdateSystem)
-           .SetResource<GameState>();
+    World world;
+    world.AddStartupSystem(StartUpSystem)
+         .SetResource<Timer>(Timer{123})
+         .AddSystem(EchoNameSystem)
+         .AddSystem(EchoNameAndIDSystem)
+         .AddSystem(EchoIDSystem)
+         .AddSystem(EchoTimeSystem);
 
-    storage.Startup();
-    storage.Update();
+    world.Startup();
 
+    world.Update();
+
+    world.Shutdown();
     return 0;
 }
