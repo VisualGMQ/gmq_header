@@ -22,33 +22,55 @@ void StartUpSystem(Commands& command) {
            .Spawn<ID>(ID{2});
 }
 
-void EchoNameSystem(Commands& command, Queryer query, Resources resources) {
+void EchoNameSystem(Commands& command, Queryer query, Resources resources, Events& e) {
     std::cout << "echo name system" << std::endl;
     std::vector<Entity> entities = query.Query<Name>();
     for (auto entity : entities) {
         std::cout << query.Get<Name>(entity).name << std::endl;
     }
+
+    auto reader = e.Reader<std::string>();
+    if (reader.Has()) {
+        std::cout << reader.Read() << std::endl;
+    }
 }
 
-void EchoNameAndIDSystem(Commands& command, Queryer query, Resources resources) {
+void EchoNameAndIDSystem(Commands& command, Queryer query, Resources resources, Events& e) {
     std::cout << "echo name and id system" << std::endl;
     std::vector<Entity> entities = query.Query<Name, ID>();
     for (auto entity : entities) {
         std::cout << query.Get<Name>(entity).name << ", " << query.Get<ID>(entity).id << std::endl;
     }
+
+    auto reader = e.Reader<std::string>();
+    if (reader.Has()) {
+        std::cout << reader.Read() << std::endl;
+    }
 }
 
-void EchoIDSystem(Commands& command, Queryer query, Resources resources) {
+bool canWrite = true;
+
+void EchoIDSystem(Commands& command, Queryer query, Resources resources, Events& e) {
     std::cout << "echo id system" << std::endl;
     std::vector<Entity> entities = query.Query<ID>();
     for (auto entity : entities) {
         std::cout << query.Get<ID>(entity).id << std::endl;
     }
+
+    if (canWrite) {
+        e.Writer<std::string>().Write("hello, I'm EchoIDSystem");
+        canWrite = false;
+    }
 }
 
-void EchoTimeSystem(Commands& command, Queryer query, Resources resources) {
+void EchoTimeSystem(Commands& command, Queryer query, Resources resources, Events& e) {
     std::cout << "echo time system" << std::endl;
     std::cout << resources.Get<Timer>().t << std::endl;
+
+    auto reader = e.Reader<std::string>();
+    if (reader.Has()) {
+        std::cout << reader.Read() << std::endl;
+    }
 }
 
 int main() {
@@ -62,6 +84,10 @@ int main() {
 
     world.Startup();
 
+    world.Update();
+    std::cout << "==================" << std::endl;
+    world.Update();
+    std::cout << "==================" << std::endl;
     world.Update();
 
     world.Shutdown();

@@ -4,6 +4,7 @@
 #include <cassert>
 #include <unordered_map>
 #include <functional>
+#include <optional>
 #include "sparse_sets.hpp"
 
 #define assertm(msg, expr) assert(((void)msg, (expr)))
@@ -40,13 +41,120 @@ private:
     inline static T curId_ = {};
 };
 
+template <typename T>
+class EventStaging final {
+public:
+    static void Set(const T& t) {
+        event_ = t;
+    }
+    static void Set(T&& t) {
+        event_ = std::move(t);
+    }
+
+    static T& Get() {
+        return *event_;
+    }
+
+    static bool Has() {
+        return event_ != std::nullopt;
+    }
+
+    static void Clear() {
+        event_ = std::nullopt;
+    }
+
+private:
+    inline static std::optional<T> event_ = std::nullopt;
+};
+
+template <typename T>
+class EventReader final {
+public:
+    bool Has() const {
+        return EventStaging<T>::Has();
+    }
+
+    T Read() {
+        return EventStaging<T>::Get();
+    }
+
+    void Clear() {
+        EventStaging<T>::Clear();
+    }
+};
+
+class World;
+
+class Events final {
+public:
+    friend class World;
+
+    template <typename T>
+    friend class EventWriter;
+
+    template <typename T>
+    auto Reader();
+
+    template <typename T>
+    auto Writer();
+
+private:
+    std::vector<void(*)(void)> removeEventFuncs_;
+    std::vector<std::function<void(void)>> addEventFuncs_;
+
+    void addAllEvents() {
+        for (auto func : addEventFuncs_) {
+            func();
+        }
+        addEventFuncs_.clear();
+    }
+
+    void removeAllEvents() {
+        for (auto func : removeEventFuncs_) {
+            func();
+        }
+        removeEventFuncs_.clear();
+    }
+};
+
+template <typename T>
+class EventWriter final {
+public:
+    EventWriter(Events& e): events_(e) {}
+    void Write(const T& t);
+
+private:
+    Events& events_;
+};
+
+
+template <typename T>
+auto Events::Reader() {
+    removeEventFuncs_.push_back([](){
+        EventStaging<T>::Clear();
+    });
+    return EventReader<T>{};
+}
+
+template <typename T>
+auto Events::Writer() {
+    return EventWriter<T>{*this};
+}
+
+template <typename T>
+void EventWriter<T>::Write(const T& t) {
+    events_.addEventFuncs_.push_back([=](){
+        EventStaging<T>::Set(t);
+    });
+}
+
 using EntityGenerator = IDGenerator<Entity>;
 
 class Commands;
 class Resources;
 class Queryer;
 
-using UpdateSystem = void(*)(Commands&, Queryer, Resources);
+using UpdateSystem = void(*)(Commands&, Queryer, Resources, Events&);
 using StartupSystem = void(*)(Commands&);
 
 class World final {
@@ -167,6 +275,7 @@ public:
         EntitySpawnInfo info;
         info.entity = EntityGenerator::Gen();
         doSpawn<ComponentTypes...>(info.entity, info.components, std::forward<ComponentTypes>(components)...);
+        spawnEntities_.push_back(info);
         return info.entity;
     }
 
@@ -256,8 +365,8 @@ private:
         info.destroy = [](void* elem){
             delete (T*)elem;
         };
-        info.assign = [&](void* elem) {
-            static auto com = std::forward<T>(component);
+        info.assign = [=](void* elem) {
+            static auto com = component;
             *((T*)elem) = com;
         };
         spawnInfo.push_back(info);
@@ -396,11 +505,14 @@ inline void World::Startup() {
 inline void World::Update() {
     std::vector<Commands> commandList;
 
+    Events events;
     for (auto sys : updateSystems_) {
         Commands commands{*this};
-        sys(commands, Queryer{*this}, Resources{*this});
+        sys(commands, Queryer{*this}, Resources{*this}, events);
         commandList.push_back(commands);
     }
+    events.removeAllEvents();
+    events.addAllEvents();
 
     for (auto& commands : commandList) {
         commands.Execute();
