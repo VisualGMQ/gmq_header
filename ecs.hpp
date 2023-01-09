@@ -100,6 +100,7 @@ public:
 
 private:
     std::vector<void(*)(void)> removeEventFuncs_;
+    std::vector<void(*)(void)> removeOldEventFuncs_;
     std::vector<std::function<void(void)>> addEventFuncs_;
 
     void addAllEvents() {
@@ -109,10 +110,11 @@ private:
         addEventFuncs_.clear();
     }
 
-    void removeAllEvents() {
-        for (auto func : removeEventFuncs_) {
+    void removeOldEvents() {
+        for (auto func : removeOldEventFuncs_) {
             func();
         }
+        removeOldEventFuncs_ = removeEventFuncs_;
         removeEventFuncs_.clear();
     }
 };
@@ -130,9 +132,6 @@ private:
 
 template <typename T>
 auto Events::Reader() {
-    removeEventFuncs_.push_back([](){
-        EventStaging<T>::Clear();
-    });
     return EventReader<T>{};
 }
 
@@ -145,6 +144,9 @@ template <typename T>
 void EventWriter<T>::Write(const T& t) {
     events_.addEventFuncs_.push_back([=](){
         EventStaging<T>::Set(t);
+    });
+    events_.removeEventFuncs_.push_back([](){
+        EventStaging<T>::Clear();
     });
 }
 
@@ -258,6 +260,7 @@ private:
     std::unordered_map<ComponentID, ResourceInfo> resources_;
     std::vector<StartupSystem> startupSystems_;
     std::vector<UpdateSystem> updateSystems_;
+    Events events_;
 };
 
 class Commands final {
@@ -505,14 +508,13 @@ inline void World::Startup() {
 inline void World::Update() {
     std::vector<Commands> commandList;
 
-    Events events;
     for (auto sys : updateSystems_) {
         Commands commands{*this};
-        sys(commands, Queryer{*this}, Resources{*this}, events);
+        sys(commands, Queryer{*this}, Resources{*this}, events_);
         commandList.push_back(commands);
     }
-    events.removeAllEvents();
-    events.addAllEvents();
+    events_.removeOldEvents();
+    events_.addAllEvents();
 
     for (auto& commands : commandList) {
         commands.Execute();
