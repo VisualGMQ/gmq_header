@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <functional>
 #include <optional>
+#include <stack>
 #include "sparse_sets.hpp"
 
 #define assertm(msg, expr) assert(((void)msg, (expr)))
@@ -34,11 +35,22 @@ template <typename T, typename = std::enable_if<std::is_integral_v<T>>>
 struct IDGenerator final {
 public:
     static T Gen() {
-        return curId_ ++;
+        if (cache_.empty()) {
+            return curId_ ++;
+        } else {
+            T e = cache_.top();
+            cache_.pop();
+            return e;
+        }
+    }
+
+    static void Recycle(T e) {
+        cache_.push(e);
     }
 
 private:
     inline static T curId_ = {};
+    inline static std::stack<T> cache_;
 };
 
 template <typename T>
@@ -401,6 +413,7 @@ private:
                 componentInfo.sparseSet.Remove(entity);
             }
             world_.entities_.erase(it);
+            IDGenerator<Entity>::Recycle(entity);
         }
     }
 
