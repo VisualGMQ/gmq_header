@@ -6,8 +6,9 @@
 #include <functional>
 #include <optional>
 #include <unordered_map>
-#include <vector>
 #include <utility>
+#include <vector>
+#include <stack>
 
 #include "sparse_sets.hpp"
 
@@ -36,10 +37,10 @@ class IndexGetter final {
 
 template <typename T, typename = std::enable_if<std::is_integral_v<T>>>
 struct IDGenerator final {
-public:
+ public:
     static T Gen() {
         if (cache_.empty()) {
-            return curId_ ++;
+            return curId_++;
         } else {
             T e = cache_.top();
             cache_.pop();
@@ -47,9 +48,7 @@ public:
         }
     }
 
-    static void Recycle(T e) {
-        cache_.push(e);
-    }
+    static void Recycle(T e) { cache_.push(e); }
 
  private:
     inline static T curId_ = {};
