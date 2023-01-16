@@ -1,12 +1,16 @@
+// Copyright 2023 VisualGMQ
+
 #pragma once
 
-#include <iostream>
-#include <string_view>
-#include <functional>
 #include <chrono>
+#include <functional>
 #include <initializer_list>
-#include <optional>
+#include <iostream>
 #include <map>
+#include <optional>
+#include <string_view>
+#include <vector>
+#include <memory>
 
 #ifndef BENCHMARK_REPEAT_NUM
 #define BENCHMARK_REPEAT_NUM 1000
@@ -20,42 +24,44 @@ using BenchmarkFunc = std::function<void(void)>;
 using BenchmarkFuncWithOp = std::function<void(Measure)>;
 
 struct Unit final {
-    Unit(std::string_view name, BenchmarkFunc func): name(name), func(func), time(0) {}
-    Unit(std::string_view name, BenchmarkFuncWithOp func): name(name), funcWithOp(func), time(0) {}
+    Unit(std::string_view name, BenchmarkFunc func)
+        : name(name), func(func), time(0) {}
+    Unit(std::string_view name, BenchmarkFuncWithOp func)
+        : name(name), funcWithOp(func), time(0) {}
 
     std::string_view name;
     BenchmarkFunc func;
     BenchmarkFuncWithOp funcWithOp;
-    long long time;
+    uint64_t time;
 };
 
 class Measure final {
-public:
-    Measure(Unit& unit): unit_(unit) {}
+ public:
+    explicit Measure(Unit& unit) : unit_(unit) {}
 
     void operator()(BenchmarkFunc func) const {
         auto begin = std::chrono::steady_clock::now();
         if (func) {
-            for (long long i = 0; i < BENCHMARK_REPEAT_NUM; i++) {
+            for (uint64_t i = 0; i < BENCHMARK_REPEAT_NUM; i++) {
                 (void)func();
             }
         }
-        unit_.time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count();
+        unit_.time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::steady_clock::now() - begin)
+                         .count();
     }
 
-private:
+ private:
     Unit& unit_;
 };
 
 class Group final {
-public:
+ public:
     friend class BenchmarkMgr;
 
-    Group(std::string_view name): name_(name) {}
+    explicit Group(std::string_view name) : name_(name) {}
 
-    void Add(const Unit& unit) {
-        units_.push_back(unit);
-    }
+    void Add(const Unit& unit) { units_.push_back(unit); }
 
     void DoBenchmark() {
         std::cout << "running group " << name_ << std::endl;
@@ -74,23 +80,25 @@ public:
         for (auto& unit : units_) {
             std::cout << unit.name << ":" << std::endl;
             std::cout << "\ttotle time: " << unit.time << "ms" << std::endl;
-            std::cout << "\taverage time: " << unit.time / static_cast<float>(BENCHMARK_REPEAT_NUM) << "ms" << std::endl;
+            std::cout << "\taverage time: "
+                      << unit.time / static_cast<float>(BENCHMARK_REPEAT_NUM)
+                      << "ms" << std::endl;
             std::cout << std::endl;
         }
     }
 
-private:
+ private:
     std::vector<Unit> units_;
     std::string_view name_;
 
-    void measureOneUnit(Unit& unit) {
+    void measureOneUnit(Unit& unit) const {
         if (unit.func) {
             Measure measure(unit);
             measure(unit.func);
         }
     }
 
-    void measureOneUnitWithExtraOp(Unit& unit) {
+    void measureOneUnitWithExtraOp(Unit& unit) const {
         if (unit.funcWithOp) {
             unit.funcWithOp(Measure{unit});
         }
@@ -98,7 +106,7 @@ private:
 };
 
 class BenchmarkMgr final {
-public:
+ public:
     static BenchmarkMgr& Instance() {
         static std::unique_ptr<BenchmarkMgr> instance;
 
@@ -135,9 +143,7 @@ public:
         doRun(names...);
     }
 
-    void BeginGroup( std::string_view name) {
-        group_ = Group(name);
-    }
+    void BeginGroup(std::string_view name) { group_ = Group(name); }
 
     void PushCurrentGroup() {
         if (group_) {
@@ -151,7 +157,7 @@ public:
         }
     }
 
-private:
+ private:
     std::map<std::string_view, Group> groups_;
     std::optional<Group> group_;
 
@@ -179,7 +185,7 @@ private:
         }
     }
 
-    void doBenchmarkInGroup(Group& group) {
+    void doBenchmarkInGroup(Group& group) const {
         group.DoBenchmark();
         std::cout << std::endl;
         group.ShowResult();
@@ -190,12 +196,21 @@ private:
     }
 };
 
-}
-
+}  // namespace benchmark
 
 #define BENCHMARK_MAIN int main(int argc, char** argv)
-#define BENCHMARK_GROUP(name)  benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().BeginGroup(name);
-#define BENCHMARK_ADD(name, func) benchmark::BenchmarkMgr::Instance().AddUnit2CurrentGroup(benchmark::Unit(name, func));
-#define BENCHMARK_RUN_GROUPS(...) benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().Run(__VA_ARGS__);
-#define BENCHMARK_RUN_ALL() benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().RunAll();
-#define BENCHMARK_RUN() benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); benchmark::BenchmarkMgr::Instance().RunByCmd(argc, argv);
+#define BENCHMARK_GROUP(name)                               \
+    benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); \
+    benchmark::BenchmarkMgr::Instance().BeginGroup(name);
+#define BENCHMARK_ADD(name, func)                             \
+    benchmark::BenchmarkMgr::Instance().AddUnit2CurrentGroup( \
+        benchmark::Unit(name, func));
+#define BENCHMARK_RUN_GROUPS(...)                           \
+    benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); \
+    benchmark::BenchmarkMgr::Instance().Run(__VA_ARGS__);
+#define BENCHMARK_RUN_ALL()                                 \
+    benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); \
+    benchmark::BenchmarkMgr::Instance().RunAll();
+#define BENCHMARK_RUN()                                     \
+    benchmark::BenchmarkMgr::Instance().PushCurrentGroup(); \
+    benchmark::BenchmarkMgr::Instance().RunByCmd(argc, argv);

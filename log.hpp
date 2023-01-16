@@ -1,3 +1,4 @@
+// Copyright 2023 VisualGMQ
 #pragma once
 
 #include <iostream>
@@ -6,6 +7,8 @@
 #include <fstream>
 #include <map>
 #include <utility>
+#include <string>
+#include <memory>
 
 namespace logger {
 
@@ -20,7 +23,7 @@ enum Level {
 };
 
 class Logger final {
-public:
+ public:
     Logger(std::ostream& o): stream_(o), level_(All) {}
 
     template <typename... Args>
@@ -55,14 +58,14 @@ public:
 
     void SetLevel(Level level) { level_ = level; }
 
-private:
+ private:
     std::ostream& stream_;
     Level level_;
 
     template <typename... Args>
     void log(Level level, std::string_view funcName, std::string_view filename, unsigned int line, Args&&... args) {
         if (level <= level_) {
-            printf("[%s][%s][%s][%d]", Level2Str(level).data(), filename.data(), funcName.data(), line);
+            printf("[%s][%s][%s][%u]", Level2Str(level).data(), filename.data(), funcName.data(), line);
             doLog(std::forward<Args>(args)...);
             stream_ << std::endl;
         }
@@ -96,7 +99,7 @@ private:
 };
 
 class LoggerMgr final {
-public:
+ public:
     static LoggerMgr& Instance() {
         static std::unique_ptr<LoggerMgr> instance;
         if (!instance) {
@@ -118,7 +121,7 @@ public:
 
     Logger& GetDefault() { return *defaultLogger_; }
 
-private:
+ private:
     std::vector<std::ofstream> files_;
     std::map<std::string, Logger> loggers_;
     std::unique_ptr<Logger> defaultLogger_;
@@ -142,4 +145,4 @@ private:
 #define e(...) Error(__FUNCTION__, __FILE__, __LINE__, ## __VA_ARGS__)
 #define f(...) FatalError(__FUNCTION__, __FILE__, __LINE__, ## __VA_ARGS__)
 
-}
+}  // namespace logger
