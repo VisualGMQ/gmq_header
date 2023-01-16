@@ -2,3 +2,7 @@ build
 cmake-build
 .vscode
 compile_flags.txt
+clang-build
+.cache
+.clang-format
+compile_commands.json

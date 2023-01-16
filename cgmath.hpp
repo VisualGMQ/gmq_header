@@ -1,665 +1,585 @@
+// Copyright 2023 VisualGMQ
+
 #pragma once
 
-#include <utility>
-#include <iostream>
-#include <cmath>
-#include <vector>
 #include <array>
-
-// you can open SSE if you want to use SIMD
-#ifdef USE_SIMD
-#include "nmmintrin.h"
-#endif
+#include <cassert>
+#include <cmath>
+#include <initializer_list>
+#include <iostream>
+#include <utility>
+#include <vector>
+#include <algorithm>
 
 namespace cgmath {
 
-constexpr double PI = 3.14159265358979;
+// some forward declare for Vec
 
-// some math function
-
-inline double Rad2Deg(double value) {
-    return value * 180.0 / PI;
-}
-
-inline double Deg2Rad(double value) {
-    return value * PI / 180.0;
-}
-
-// vector structure decalre
-
-template <typename T, unsigned int AttrNum>
-class VecMemberGenerator;
-
-template <typename T, unsigned int AttrNum>
-struct Vector final: public VecMemberGenerator<T, AttrNum> {
-    Vector(const Vector& o) {
-        VecMemberGenerator<T, 2>::setVec(this);
-        *this = o;
-    }
-
-    Vector() = default;
-
-    Vector(const std::initializer_list<T>& datas) {
-        VecMemberGenerator<T, AttrNum>::setVec(this);
-        VecMemberGenerator<T, AttrNum>::initVec(datas);
-    }
-
-    T data[AttrNum];
-};
-
-// disable Vector<T, 1>
-template <typename T>
-struct Vector<T, 1> final: public VecMemberGenerator<T, 1> {};
-
-template <typename T>
-struct Vector<T, 2> final: public VecMemberGenerator<T, 2> {
-    Vector(const Vector& o) {
-        VecMemberGenerator<T, 2>::setVec(this);
-        *this = o;
-    }
-
-    Vector() = default;
-
-    Vector(const std::initializer_list<T>& datas) {
-        VecMemberGenerator<T, 2>::setVec(this);
-        VecMemberGenerator<T, 2>::initVec(datas);
-    }
-
-    T Cross(const Vector& o) {
-        return ::cgmath::Cross(*this, o);
-    }
-
-    T x() const { return data[0]; }
-    T y() const { return data[1]; }
-    void x(const T& value) { data[0] = value; }
-    void y(const T& value) { data[1] = value; }
-
-    T data[2];
-};
-
-template <typename T>
-struct Vector<T, 3> final: public VecMemberGenerator<T, 3> {
-    Vector(const Vector& o) {
-        VecMemberGenerator<T, 3>::setVec(this);
-        *this = o;
-    }
-
-    Vector() = default;
-
-    Vector(const std::initializer_list<T>& datas) {
-        VecMemberGenerator<T, 3>::setVec(this);
-        VecMemberGenerator<T, 3>::initVec(datas);
-    }
-
-    auto Cross(const Vector& o) {
-        return ::cgmath::Cross(*this, o);
-    }
-
-    T x() const { return data[0]; }
-    T y() const { return data[1]; }
-    T z() const { return data[2]; }
-    void x(const T& value) { data[0] = value; }
-    void y(const T& value) { data[1] = value; }
-    void z(const T& value) { data[2] = value; }
-
-    T data[3];
-};
-
-template <typename T>
-struct Vector<T, 4> final: public VecMemberGenerator<T, 4> {
-    Vector(const Vector& o) {
-        VecMemberGenerator<T, 4>::setVec(this);
-        *this = o;
-    }
-
-    Vector() = default;
-
-    Vector(const std::initializer_list<T>& datas) {
-        VecMemberGenerator<T, 4>::setVec(this);
-        VecMemberGenerator<T, 4>::initVec(datas);
-    }
-
-    T x() const { return data[0]; }
-    T y() const { return data[1]; }
-    T z() const { return data[2]; }
-    T w() const { return data[3]; }
-    void x(const T& value) { data[0] = value; }
-    void y(const T& value) { data[1] = value; }
-    void z(const T& value) { data[2] = value; }
-    void w(const T& value) { data[3] = value; }
-
-    T data[4];
-};
-
-// some full specialization for SIMD
-
-#ifdef USE_SIMD
-
-template <>
-struct Vector<float, 4> final {
-public:
-    Vector(float x, float y, float z, float w) {
-        data_ = _mm_setr_ps(x, y, z, w);
-    }
-
-    Vector operator+(const Vector& oth) const {
-        return Vector{_mm_add_ps(data_, oth.data_)};
-    }
-
-    Vector operator-(const Vector& oth) const {
-        return Vector{_mm_sub_ps(data_, oth.data_)};
-    }
-
-    Vector operator*(const Vector& oth) const {
-        return Vector{_mm_mul_ps(data_, oth.data_)};
-    }
-
-    Vector operator/(const Vector& oth) const {
-        return Vector{_mm_div_ps(data_, oth.data_)};
-    }
-
-    Vector& operator+=(const Vector& oth) {
-        *this = *this + oth;
-        return *this;
-    }
-
-    Vector& operator-=(const Vector& oth) {
-        *this = *this - oth;
-        return *this;
-    }
-
-    Vector& operator*=(const Vector& oth) {
-        *this = *this * oth;
-        return *this;
-    }
-
-    Vector& operator*=(float value) {
-        *this = *this * value;
-        return *this;
-    }
-
-    Vector& operator/=(const Vector& oth) {
-        *this = *this / oth;
-        return *this;
-    }
-
-    Vector& operator/=(float value) {
-        *this = *this / value;
-        return *this;
-    }
-
-    Vector operator*(float value) const {
-        return *this * Vector(value, value, value, value);
-    }
-
-    Vector operator/(float value) const {
-        return *this / Vector(value, value, value, value);
-    }
-
-    float Dot(const Vector& oth) const {
-        return ::cgmath::Dot(*this, oth);
-    }
-
-    float x() const {
-        return _mm_cvtss_f32(data_);
-    }
-
-    float y() const {
-        alignas(32) float p[4];
-        _mm_store_ps(p, data_);
-        return p[1];
-    }
-
-    float z() const {
-        alignas(32) float p[4];
-        _mm_store_ps(p, data_);
-        return p[2];
-    }
-
-    float w() const {
-        alignas(32) float p[4];
-        _mm_store_ps(p, data_);
-        return p[3];
-    }
-
-    void Print(std::ostream& o) const {
-        alignas(32) float p[4];
-        _mm_store_ps(p, data_);
-        o << "Vec4(" << p[0] << ", " << p[1] << ", " << p[2] << ", " << p[3] << ")";
-    }
-
-    bool operator==(const Vector& o) const {
-        return (_mm_movemask_ps(_mm_cmpeq_ps(data_, o.data_)) & 15) == 15;
-    }
-
-    bool operator!=(const Vector& o) const {
-        return !(*this == o);
-    }
-
-private:
-    __m128 data_;
-
-    friend float Dot(const Vector<float, 4>& lhs, const Vector<float, 4>& rhs);
-
-    explicit Vector(__m128 data): data_(data) {}
-};
-
-Vector<float, 4> operator*(float value, const Vector<float, 4>& v) {
-    return v * Vector<float, 4>(value, value, value, value);
-}
-
-inline float Dot(const Vector<float, 4>& lhs, const Vector<float, 4>& rhs) {
-    return _mm_cvtss_f32(_mm_dp_ps(lhs.data_, rhs.data_, 0xFF));
-}
-
-inline std::ostream& operator<<(std::ostream& o, const Vector<float, 4>& v) {
-    v.Print(o);
-    return o;
-}
-
+#ifndef CGMATH_NUMERIC_TYPE
+#define CGMATH_NUMERIC_TYPE float
 #endif
 
-// some types
+template <typename T>
+using MustArithmetic = std::enable_if_t<std::is_arithmetic_v<T>>;
 
-#ifndef VECTOR_DATA_TYPE
-#define VECTOR_DATA_TYPE float
-#endif
+template <typename T, unsigned int N>
+class Vec;
+template <typename T, unsigned int Col, unsigned int Row, typename>
+class Mat;
 
-using Vec2 = Vector<VECTOR_DATA_TYPE, 2>;
-using Vec3 = Vector<VECTOR_DATA_TYPE, 3>;
-using Vec4 = Vector<VECTOR_DATA_TYPE, 4>;
+using Vec2 = Vec<CGMATH_NUMERIC_TYPE, 2>;
+using Vec3 = Vec<CGMATH_NUMERIC_TYPE, 3>;
+using Vec4 = Vec<CGMATH_NUMERIC_TYPE, 4>;
 
+template <typename T, unsigned int N>
+Vec<T, N> operator+(const Vec<T, N>&, const Vec<T, N>&);
+template <typename T, unsigned int N>
+Vec<T, N> operator-(const Vec<T, N>&, const Vec<T, N>&);
+template <typename T, typename U, unsigned int N, typename = MustArithmetic<U>>
+Vec<T, N> operator*(T, const Vec<T, N>&);
+template <typename T, typename U, unsigned int N, typename = MustArithmetic<U>>
+Vec<T, N> operator*(const Vec<T, N>&, T);
+template <typename T, typename U, unsigned int N, typename = MustArithmetic<U>>
+Vec<T, N> operator/(const Vec<T, N>&, T);
+template <typename T, unsigned int N>
+Vec<T, N> operator*(const Vec<T, N>&, const Vec<T, N>&);
+template <typename T, unsigned int N>
+Vec<T, N> operator/(const Vec<T, N>&, const Vec<T, N>&);
+template <typename T, unsigned int N>
+bool operator!=(const Vec<T, N>& v1, const Vec<T, N>& v2);
+template <typename T, unsigned int N>
+bool operator==(const Vec<T, N>& v1, const Vec<T, N>& v2);
+template <typename T, unsigned int N>
+T LengthSquare(const Vec<T, N>& v);
+template <typename T, unsigned int N>
+T Length(const Vec<T, N>& v);
+template <typename T, unsigned int N>
+T Project(const Vec<T, N>& src, const Vec<T, N>& des);
+template <typename T>
+T Cross(const Vec<T, 2>& v1, const Vec<T, 2>& v2);
+template <typename T>
+Vec<T, 3> Cross(const Vec<T, 3>& v1, const Vec<T, 3>& v2);
+template <typename T, unsigned int N>
+Vec<T, N> Normalize(const Vec<T, N>& v);
 
-// some math function for vector
+// Vec function implementations
 
-template <typename T, unsigned int AttrNum>
-std::ostream& operator<<(std::ostream& o, const Vector<T, AttrNum>& v) {
-    o << "Vec" << AttrNum << "(";
-    for (int i = 0; i < AttrNum; i++) {
-        o << v.data[i];
-        if (i != AttrNum - 1) {
-            o << ", ";
-        }
+template <typename T, unsigned int N, unsigned int NewN>
+auto VecCvt(const Vec<T, N>& v) {
+    Vec<T, NewN> result;
+    unsigned int idx = 0;
+    unsigned int min = std::min(N, NewN);
+
+    while (idx < min) {
+        result.data[idx] = v.data[idx];
+        idx++;
     }
-    o << ")";
-    return o;
+
+    while (idx < NewN) {
+        result.data[idx] = T{};
+    }
+    return result;
 }
 
-template <typename T, typename U, unsigned int AttrNum>
-auto operator+(const Vector<T, AttrNum>& v1, const Vector<U, AttrNum>& v2) {
-    Vector<std::common_type_t<T, U>, AttrNum> result;
-    for (int i = 0; i < AttrNum; i++) {
+template <typename T, unsigned int N>
+Vec<T, N> operator+(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+    Vec<T, N> result;
+    for (unsigned int i = 0; i < N; i++) {
         result.data[i] = v1.data[i] + v2.data[i];
     }
     return result;
 }
 
-template <typename T, typename U, unsigned int AttrNum>
-auto operator-(const Vector<T, AttrNum>& v1, const Vector<U, AttrNum>& v2) {
-    Vector<std::common_type_t<T, U>, AttrNum> result;
-    for (int i = 0; i < AttrNum; i++) {
+template <typename T, unsigned int N>
+Vec<T, N> operator-(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+    Vec<T, N> result;
+    for (unsigned int i = 0; i < N; i++) {
         result.data[i] = v1.data[i] - v2.data[i];
     }
     return result;
 }
 
-template <typename T, typename U, unsigned int AttrNum>
-auto operator*(const Vector<T, AttrNum>& v1, const Vector<U, AttrNum>& v2) {
-    Vector<std::common_type_t<T, U>, AttrNum> result;
-    for (int i = 0; i < AttrNum; i++) {
+
+template <typename T, typename U, unsigned int N, typename = MustArithmetic<U>>
+Vec<T, N> operator*(U value, const Vec<T, N>& v) {
+    Vec<T, N> result;
+    for (unsigned int i = 0; i < N; i++) {
+        result.data[i] = v.data[i] * value;
+    }
+    return result;
+}
+
+template <typename T, typename U, unsigned int N, typename = MustArithmetic<U>>
+Vec<T, N> operator*(const Vec<T, N>& v, U value) {
+    return value * v;
+}
+
+template <typename T, typename U, unsigned int N, typename = MustArithmetic<U>>
+Vec<T, N> operator/(const Vec<T, N>& v, U value) {
+    Vec<T, N> result;
+    for (unsigned int i = 0; i < N; i++) {
+        result.data[i] = v.data[i] / value;
+    }
+    return result;
+}
+
+
+template <typename T, unsigned int N>
+Vec<T, N> operator*(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+    Vec<T, N> result;
+    for (unsigned int i = 0; i < N; i++) {
         result.data[i] = v1.data[i] * v2.data[i];
     }
     return result;
 }
 
-template <typename T, typename U, unsigned int AttrNum>
-auto operator*(const Vector<T, AttrNum>& v1, const U& scalar) {
-    Vector<std::common_type_t<T, U>, AttrNum> result;
-    for (int i = 0; i < AttrNum; i++) {
-        result.data[i] = v1.data[i] * scalar;
-    }
-    return result;
-}
-
-template <typename T, typename U, unsigned int AttrNum>
-auto operator/(const Vector<T, AttrNum>& v1, const Vector<U, AttrNum>& v2) {
-    Vector<std::common_type_t<T, U>, AttrNum> result;
-    for (int i = 0; i < AttrNum; i++) {
+template <typename T, unsigned int N>
+Vec<T, N> operator/(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+    Vec<T, N> result;
+    for (unsigned int i = 0; i < N; i++) {
         result.data[i] = v1.data[i] / v2.data[i];
     }
     return result;
 }
 
-template <typename T, typename U, unsigned int AttrNum>
-auto operator*(const U& scalar, const Vector<T, AttrNum>& v1) {
-    return v1 * scalar;
-}
-
-template <typename T, typename U, unsigned int AttrNum>
-auto operator/(const Vector<T, AttrNum>& v1, const U& scalar) {
-    Vector<std::common_type_t<T, U>, AttrNum> result;
-    for (int i = 0; i < AttrNum; i++) {
-        result.data[i] = v1.data[i] / scalar;
-    }
-    return result;
-}
-
-template <typename T, typename U, unsigned int AttrNum>
-auto Dot(const Vector<T, AttrNum>& v1, const Vector<U, AttrNum>& v2) {
-    using CommonType = std::common_type_t<T, U>;
-    CommonType sum = CommonType{};
-
-    for (int i = 0; i < AttrNum; i++) {
+template <typename T, unsigned int N>
+T Dot(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+    T sum{};
+    for (unsigned int i = 0; i < N; i++) {
         sum += v1.data[i] * v2.data[i];
     }
-
     return sum;
 }
 
-template <typename T, typename U>
-auto Cross(const Vector<T, 2>& v1, const Vector<U, 2>& v2) {
-    using CommonType = std::common_type_t<T, U>;
-    CommonType result = CommonType{};
-
-    result = v1.data[0] * v2.data[1] - v1.data[1] * v2.data[0];
-
-    return result;
-}
-
-template <typename T, typename U>
-auto Cross(const Vector<T, 3>& v1, const Vector<U, 3>& v2) {
-    using CommonType = std::common_type_t<T, U>;
-    Vector<CommonType, 3> result;
-
-    result.data[0] = v1.data[1] * v2.data[2] - v1.data[2] * v2.data[1];
-    result.data[1] = v1.data[2] * v2.data[0] - v1.data[0] * v2.data[2];
-    result.data[2] = v1.data[0] * v2.data[1] - v1.data[1] * v2.data[0];
-
-    return result;
-}
-
-template <typename T, unsigned int AttrNum>
-T LengthSquare(const Vector<T, AttrNum>& v) {
-    T sum = T{};
-
-    for (auto& data : v.data) {
-        sum += data * data;
+template <typename T, unsigned int N>
+bool operator==(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+    for (unsigned int i = 0; i < N; i++) {
+        if (v1.data[i] != v2.data[i]) {
+            return false;
+        }
     }
-
-    return sum;
+    return true;
 }
 
-template <typename T, unsigned int AttrNum>
-auto Length(const Vector<T, AttrNum>& v) {
+template <typename T, unsigned int N>
+bool operator!=(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+    return !(v1 == v2);
+}
+
+template <typename T>
+T Cross(const Vec<T, 2>& v1, const Vec<T, 2>& v2) {
+    return v1.x * v2.y - v1.y * v2.x;
+}
+
+template <typename T>
+Vec<T, 3> Cross(const Vec<T, 3>& v1, const Vec<T, 3>& v2) {
+    Vec<T, 3> result;
+    result.x = v1.y * v2.z - v1.z * v2.y;
+    result.y = v1.z * v2.x - v1.x * v2.z;
+    result.z = v1.x * v2.y - v1.y * v2.x;
+    return result;
+}
+
+template <typename T, unsigned int N>
+T LengthSquare(const Vec<T, N>& v) {
+    return Dot(v, v);
+}
+
+template <typename T, unsigned int N>
+T Length(const Vec<T, N>& v) {
     return std::sqrt(LengthSquare(v));
 }
 
-template <typename T, unsigned int AttrNum>
-auto Normalize(const Vector<T, AttrNum>& v) {
+template <typename T, unsigned int N>
+T Project(const Vec<T, N>& src, const Vec<T, N>& des) {
+    return Dot(src, des) / Length(des);
+}
+
+template <typename T, unsigned int N>
+Vec<T, N> Normalize(const Vec<T, N>& v) {
     return v / Length(v);
 }
 
-template <typename T, typename U, unsigned int AttrNum>
-auto Project(const Vector<T, AttrNum>& src, const Vector<T, AttrNum>& des) {
-    return src.Dot(des) / des.Length();
-}
+// basic vector class
 
-template <typename T, unsigned int AttrNum>
-auto Reflect(const Vector<T, AttrNum>& v, const Vector<T, AttrNum>& n) {
-    auto norm = Project(v, n);
-    return 2 * norm - v;
-}
+template <typename T, unsigned int N>
+class Vec {
+ public:
+    T data[N];
 
-/* @return  T radians*/
-template <typename T>
-auto GetAngle(const Vector<T, 2>& v) {
-    return std::atan(v.y, v.x);
-}
+    Vec() { memset(data, 0, sizeof(data)); }
 
-template <typename T, unsigned int AttrNum>
-auto GetAngleBetweenVecs(const Vector<T, AttrNum>& v1, const Vector<T, AttrNum>& v2) {
-    return std::acos(v1.Dot(v2) / (v1.Length() * v2.Length()));
-}
-
-/* @return  Vector<T, 3>  in radians*/
-template <typename T>
-Vector<T, 3> GetAngle(const Vector<T, 3>& v) {
-    return Vector<T, 3>(GetAngleBetweenVecs(v, Vector<T, 3>(1, 0, 0)),
-                        GetAngleBetweenVecs(v, Vector<T, 3>(0, 1, 0)),
-                        GetAngleBetweenVecs(v, Vector<T, 3>(0, 0, 1)));
-}
-
-/* a help class to auto-generate member func for Vector
-   use CRTP (see: https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Curiously_Recurring_Template_Pattern) */
-template <typename T, unsigned int AttrNum>
-class VecMemberGenerator {
-public:
-    using VecT = Vector<T, AttrNum>;
-
-    VecT& operator+=(const VecT& o) const {
-        for (int i = 0; i < AttrNum; i++) {
-            vec_->data[i] += o.data[i];
-        }
-        return *vec_;
-    }
-
-    VecT& operator-=(const VecT& o) const {
-        for (int i = 0; i < AttrNum; i++) {
-            vec_->data[i] -= o.data[i];
-        }
-        return *vec_;
-    }
-
-    VecT& operator*=(const VecT& o) const {
-        for (int i = 0; i < AttrNum; i++) {
-            vec_->data[i] *= o.data[i];
-        }
-        return *vec_;
-    }
-
-    VecT& operator/=(const VecT& o) const {
-        for (int i = 0; i < AttrNum; i++) {
-            vec_->data[i] /= o.data[i];
-        }
-        return *vec_;
-    }
-
-	VecT& operator-() {
-		for (int i = 0; i < AttrNum; i++) {
-            vec_->data[i] = -vec_->data[i];
-		}
-		return *vec_;
-	}
-
-    void Normalize() {
-        *vec_ = ::cgmath::Normalize(*vec_);
-    }
-
-    template <typename U>
-    auto Dot(const Vector<U, AttrNum>& o) {
-        return cgmath::Dot(*vec_, o);
-    }
-
-    auto LengthSquare() {
-        return ::cgmath::LengthSquare(*vec_);
-    }
-
-    auto Length() {
-        return ::cgmath::Length(*vec_);
-    }
-
-    template <typename U>
-    VecT& operator=(const Vector<U, AttrNum>& o) {
-        if (&o == vec_) {
-            return *vec_;
-        }
-
-        for (int i = 0; i < AttrNum; i++) {
-            vec_->data[i] = o.vec_->data[i];
-        }
-        return *vec_;
-    }
-
-    template <typename U>
-    bool operator==(const Vector<U, AttrNum>& o) const {
-        for (int i = 0; i < AttrNum; i++) {
-            if (vec_->data[i] != o.data[i])
-                return false;
-        }
-        return true;
-    }
-
-    template <typename U>
-    bool operator!=(const Vector<U, AttrNum>& o) const {
-        return !(*vec_ == o);
-    }
-
-    const T& operator[](unsigned int idx) const {
-        return vec_->data[idx];
-    }
-
-     T& operator[](unsigned int idx) {
-        return vec_->data[idx];
-    }
-
-protected:
-    VecT* vec_ = nullptr;
-
-    VecMemberGenerator() = default;
-    VecMemberGenerator(const VecMemberGenerator& o) {}
-
-    void setVec(VecT* v) { vec_ = v; }
-
-    void initVec(const std::initializer_list<T>& datas) {
-        auto it = datas.begin();
-        int i = 0;
-        while (it != datas.end() && i < AttrNum) {
-            vec_->data[i] = *it;
+    Vec(const std::initializer_list<T>& initList) {
+        auto it = initList.begin();
+        unsigned int idx = 0;
+        while (it != initList.end() && idx < N) {
+            data[idx] = *it;
             it++;
-            i++;
+            idx++;
         }
+        while (idx < N) {
+            data[idx++] = 0;
+        }
+    }
 
-        while (i < AttrNum) {
-            vec_->data[i] = T{};
-            i++;
+    auto Dot(const Vec<T, N>& o) const { return Dot(*this, o); }
+
+    auto operator+=(const Vec<T, N>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator-=(const Vec<T, N>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(const Vec<T, N>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator/=(const Vec<T, N>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(T value) {
+        *this = *this * value;
+        return *this;
+    }
+
+    auto operator/=(T value) {
+        *this = *this / value;
+        return *this;
+    }
+
+    auto LengthSquare() const { return LengthSquare(*this); }
+
+    auto Length() const { return Length(*this); }
+
+    void Normalize() const { *this = Normalize(*this); }
+
+    Vec& operator=(const Vec& o) {
+        for (unsigned int i = 0; i < N; i++) {
+            this->data[i] = o.data[i];
         }
+        return *this;
     }
 };
 
-// matrx, column first
+template <typename T>
+class Vec<T, 2> final {
+ public:
+    union {
+        struct {
+            T x, y;
+        };
+        T data[2];
+    };
 
-template <typename T, int Col, int Row>
-class Matrix final {
-public:
-    Matrix() {}
+    Vec() : x{}, y{} {}
+    explicit Vec(T x) : x(x), y{} {}
+    Vec(T x, T y) : x(x), y(y) {}
 
-    Matrix(const std::vector<Vector<T, Row>>& cols) {
-        for (int x = 0; x < Col; x++) {
-            for (int y = 0; y < Row; y++) {
-                Set(x, y, cols[x].data[y]);
+    auto Dot(const Vec<T, 2>& o) const { return cgmath::Dot(*this, o); }
+
+    auto operator+=(const Vec<T, 2>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator-=(const Vec<T, 2>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(const Vec<T, 2>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator/=(const Vec<T, 2>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(T value) {
+        *this = *this * value;
+        return *this;
+    }
+
+    auto operator/=(T value) {
+        *this = *this / value;
+        return *this;
+    }
+
+    auto LengthSquare() const { return cgmath::LengthSquare(*this); }
+
+    auto Length() const { return cgmath::Length(*this); }
+
+    void Normalize() { *this = cgmath::Normalize(*this); }
+
+    auto Cross(const Vec<T, 2>& o) const { return cgmath::Cross(*this, o); }
+
+    Vec& operator=(const Vec& o) {
+        this->x = o.x;
+        this->y = o.y;
+        return *this;
+    }
+};
+
+template <typename T>
+class Vec<T, 3> final {
+ public:
+    union {
+        struct {
+            T x, y, z;
+        };
+        T data[3];
+    };
+
+    Vec() : x{}, y{}, z{} {}
+    explicit Vec(T x) : x(x), y{}, z{} {}
+    Vec(T x, T y) : x(x), y(y), z{} {}
+    Vec(T x, T y, T z) : x(x), y(y), z(z) {}
+
+    auto Dot(const Vec<T, 3>& o) const { return cgmath::Dot(*this, o); }
+
+    auto operator+=(const Vec<T, 3>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator-=(const Vec<T, 3>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(const Vec<T, 3>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator/=(const Vec<T, 3>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(T value) {
+        *this = *this * value;
+        return *this;
+    }
+
+    auto operator/=(T value) {
+        *this = *this / value;
+        return *this;
+    }
+
+    auto LengthSquare() const { return cgmath::LengthSquare(*this); }
+
+    auto Length() const { return cgmath::Length(*this); }
+
+    void Normalize() { *this = cgmath::Normalize(*this); }
+
+    auto Cross(const Vec<T, 3>& o) { return cgmath::Cross(*this, o); }
+
+    Vec& operator=(const Vec& o) {
+        this->x = o.x;
+        this->y = o.y;
+        this->z = o.z;
+        return *this;
+    }
+};
+
+template <typename T>
+class Vec<T, 4> final {
+ public:
+    union {
+        struct {
+            T x, y, z, w;
+        };
+        T data[4];
+    };
+
+    Vec() : x{}, y{}, z{}, w{} {}
+    explicit Vec(T x) : x(x), y{}, z{}, w{} {}
+    Vec(T x, T y) : x(x), y(y), z{}, w{} {}
+    Vec(T x, T y, T z) : x(x), y(y), z(z), w{} {}
+    Vec(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
+
+    auto Dot(const Vec<T, 4>& o) const { return Dot(*this, o); }
+
+    auto operator+=(const Vec<T, 4>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator-=(const Vec<T, 4>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(const Vec<T, 4>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator/=(const Vec<T, 4>& o) {
+        *this = *this + o;
+        return *this;
+    }
+
+    auto operator*=(T value) {
+        *this = *this * value;
+        return *this;
+    }
+
+    auto operator/=(T value) {
+        *this = *this / value;
+        return *this;
+    }
+
+    auto LengthSquare() const { return LengthSquare(*this); }
+
+    auto Length() const { return Length(*this); }
+
+    void Normalize() const { *this = Normalize(*this); }
+
+    Vec& operator=(const Vec& o) {
+        this->x = o.x;
+        this->y = o.y;
+        this->z = o.z;
+        this->w = o.w;
+        return *this;
+    }
+};
+
+// basic Mat class
+
+template <typename T, unsigned int Col, unsigned int Row,
+          typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+class Mat {
+ public:
+    T data[Col * Row];
+
+    static Mat Zeros() {
+        Mat mat;
+        memset(mat.data, 0, sizeof(mat.data));
+        return mat;
+    }
+
+    static Mat FromCol(const std::initializer_list<Vec<T, Row>>& initVecs) {
+        Mat mat;
+        auto it = initVecs.begin();
+        unsigned int x = 0;
+        while (it != initVecs.end()) {
+            for (unsigned int y = 0; y < Row; y++) {
+                mat.Set(x, y, it->data[y]);
             }
-        }
-    }
-
-    Matrix(const std::initializer_list<T>& datas) {
-        auto it = datas.begin();
-        int i = 0;
-        while (it != datas.end() && i < Col * Row) {
-            int x = i % Col,
-                y = i / Col;
-            Set(x, y, *it);
-            i++;
             it++;
+            x++;
         }
+        return mat;
     }
 
-    void Set(int x, int y, const T& value) {
-        data_[y + x * Row] = value;
+    static Mat FromRow(const std::initializer_list<Vec<T, Row>>& initVecs) {
+        Mat mat;
+        auto it = initVecs.begin();
+        unsigned int y = 0;
+        while (it != initVecs.end()) {
+            for (unsigned int x = 0; x < Col; x++) {
+                Set(x, y, it->data[x]);
+            }
+            it++;
+            y++;
+        }
+        return mat;
     }
 
-    const T& Get(int x, int y) const {
-        return data_[y + x * Row];
+    static Mat FromCol(const std::initializer_list<T>& initList) {
+        auto it = initList.begin();
+        unsigned int idx = 0;
+        Mat m;
+
+        while (it != initList.end() && idx < Col * Row) {
+            m.Set(idx / Row, idx % Row, *it);
+            it++;
+            idx++;
+        }
+
+        return m;
     }
 
-     T& Get(int x, int y) {
-        return data_[y + x * Row];
+    static Mat FromRow(const std::initializer_list<T>& initList) {
+        auto it = initList.begin();
+        unsigned int idx = 0;
+        Mat m;
+
+        while (it != initList.end() && idx < Col * Row) {
+            m.Set(idx % Col, idx / Col, *it);
+            it++;
+            idx++;
+        }
+
+        return m;
     }
+
+    static Mat Identity() {
+        assert(Row == Col);
+
+        Mat mat = Zeros();
+        for (int i = 0; i < Row; i++) {
+            mat.data[i, i] = 1;
+        }
+        return mat;
+    }
+
+    static Mat Ones() {
+        Mat mat;
+        memset(mat.data, 1, sizeof(mat.data));
+        return mat;
+    }
+
+    T& Get(int x, int y) {
+        assert(x >= 0 && y >= 0 && x < Col && y < Row);
+
+#ifdef CGMATH_MATRIX_ROW_FIRST
+        return data[x + y * Col];
+#else
+        return data[y + x * Row];
+#endif
+    }
+
+    T Get(int x, int y) const {
+        assert(x >= 0 && y >= 0 && x < Col && y < Row);
+
+#ifdef CGMATH_MATRIX_ROW_FIRST
+        return data[x + y * Col];
+#else
+        return data[y + x * Row];
+#endif
+    }
+
+    void Set(int x, int y, T value) { Get(x, y) = value; }
 
     constexpr int W() const { return Col; }
+
     constexpr int H() const { return Row; }
 
-    Matrix operator*(const Matrix& o) const {
-        Matrix matrix;
-        for (int x = 0; x < Col; x++) {
-            for (int y = 0; y < Row; y++) {
-                matrix.Set(x, y, Get(x, y) * o.Get(x, y));
-            }
-        }
-        return matrix;
-    }
-
-    Matrix operator/(const Matrix& o) const {
-        Matrix matrix;
-        for (int x = 0; x < Col; x++) {
-            for (int y = 0; y < Row; y++) {
-                matrix.Set(x, y, Get(x, y) / o.Get(x, y));
-            }
-        }
-        return matrix;
-    }
-
-    Matrix operator+(const Matrix& o) const {
-        Matrix matrix;
-        for (int x = 0; x < Col; x++) {
-            for (int y = 0; y < Row; y++) {
-                matrix.Set(x, y, Get(x, y) + o.Get(x, y));
-            }
-        }
-        return matrix;
-    }
-
-    Matrix operator-(const Matrix& o) const {
-        Matrix matrix;
-        for (int x = 0; x < Col; x++) {
-            for (int y = 0; y < Row; y++) {
-                matrix.Set(x, y, Get(x, y) - o.Get(x, y));
-            }
-        }
-        return matrix;
-    }
-
-    template <typename U, int Col2>
-    auto Mul(const Matrix<U, Col, Col2>& m) const {
-        return ::cgmath::Mul(*this, m);
-    }
-
-private:
-    T data_[Col * Row];
+ private:
+    Mat() = default;
 };
 
-template <typename T, typename U, int Col, int Row>
-auto operator*(const Matrix<T, Col, Row>& m, const U& scalar)  {
-    Matrix<std::common_type_t<T, U>, Col, Row> matrix;
-    for (int x = 0; x < Col; x++) {
-        for (int y = 0; y < Row; y++) {
-            matrix.Set(x, y, m.Get(x, y) * scalar);
-        }
-    }
-    return matrix;
-}
-
-template <typename T, typename U, int Col, int Row>
-auto operator*(const U& scalar, const Matrix<T, Col, Row>& m)  {
-    return m * scalar;
-}
-
-template <typename T, typename U, int Common, int Row, int Col>
-auto Mul(const Matrix<T, Common, Row>& m1, const Matrix<U, Col, Common>& m2) {
-    Matrix<std::common_type_t<T, U>, Col, Row> result;
-    for (int i = 0; i < Row; i++) {
-        for (int j = 0; j < Col; j++) {
-            T sum = T{};
-            for (int k = 0; k < Common; k++) {
+template <typename T,
+          unsigned int Common, unsigned int Mat1Row, unsigned int Mat2Col>
+auto operator*(const Mat<T, Common, Mat1Row>& m1,
+               const Mat<T, Mat2Col, Common>& m2) {
+    auto result = Mat<T, Mat2Col, Mat1Row>::Zeros();
+    for (unsigned int i = 0; i < Mat1Row; i++) {
+        for (unsigned int j = 0; j < Mat2Col; j++) {
+            T sum{};
+            for (unsigned int k = 0; k < Common; k++) {
                 sum += m1.Get(k, i) * m2.Get(j, k);
             }
             result.Set(j, i, sum);
@@ -668,176 +588,91 @@ auto Mul(const Matrix<T, Common, Row>& m1, const Matrix<U, Col, Common>& m2) {
     return result;
 }
 
-template <typename T, typename U, int Row, int Col>
-auto Mul(const Matrix<T, Col, Row>& m, const Vector<U, Col>& v) {
-    Vector<std::common_type_t<T, U>, Row> result;
-    for (int i = 0; i < Row; i++) {
-        T sum = T{};
-        for (int j = 0; j < Col; j++) {
-            sum += m.Get(j, i) * v.data[j];
-        }
-        result.data[i] = sum;
+template <typename T, typename U, unsigned int Col, unsigned int Row>
+auto operator*(const Mat<T, Col, Row>& m, U value) {
+    auto result = Mat<T, Col, Row>::Zeros();
+    for (unsigned int i = 0; i < Col * Row; i++) {
+        result.data[i] = m.data[i] * value;
     }
     return result;
 }
 
-using Mat22 = Matrix<float, 2, 2>;
-using Mat33 = Matrix<float, 3, 3>;
-using Mat44 = Matrix<float, 4, 4>;
-
-template <typename T, int Col, int Row>
-std::ostream& operator<<(std::ostream& o, const Matrix<T, Col, Row>& m) {
-    o << "[" << std::endl;
-    for (int y = 0; y < Row; y++) {
-        for (int x = 0; x < Col; x++) {
-            o << m.Get(x, y) << "\t";
-        }
-        std::cout << std::endl;
-    }
-    o << "]";
-
-    return o;
+template <typename T, typename U, unsigned int Col, unsigned int Row>
+auto operator*(U value, const Mat<T, Col, Row>& m) {
+    return m * value;
 }
 
-#ifdef USE_SIMD
-
-template <>
-class Matrix<float, 4, 4> final {
-public:
-    Matrix() {}
-
-    Matrix(const std::vector<Vector<float, 4>>& cols) {
-        for (int i = 0; i < 4; i++) {
-            Set(i, 0, cols[i].x());
-            Set(i, 1, cols[i].y());
-            Set(i, 2, cols[i].z());
-            Set(i, 3, cols[i].w());
-        }
+template <typename T, typename U, unsigned int Col, unsigned int Row>
+auto operator/(const Mat<T, Col, Row>& m, T value) {
+    Mat<T, Col, Row> result;
+    for (unsigned int i = 0; i < Col * Row; i++) {
+        result.data[i] = m.data[i] / value;
     }
-
-    Matrix(const std::initializer_list<float>& datas) {
-        auto it = datas.begin();
-        int i = 0;
-        while (it != datas.end() && i < 4 * 4) {
-            int x = i % 4,
-                y = i / 4;
-            Set(x, y, *it);
-            i++;
-            it++;
-        }
-    }
-
-    void Set(int x, int y, const float& value) {
-        datas_[y + x * 4] = value;
-    }
-
-    const float& Get(int x, int y) const {
-        return datas_[y + x * 4];
-    }
-
-    float& Get(int x, int y) {
-        return datas_[y + x * 4];
-    }
-
-    constexpr int W() const { return 4; }
-    constexpr int H() const { return 4; }
-
-    Matrix operator+(const Matrix& o) const {
-        Matrix matrix;
-        auto simd1 = array2Simd();
-        auto simd2 = o.array2Simd();
-        std::array<__m128, 4> result;
-        for (int i = 0; i < 4; i++) {
-            result[i] = _mm_add_ps(simd1[i], simd2[i]);
-        }
-        matrix.simd2Array(result);
-        return matrix;
-    }
-
-    Matrix operator-(const Matrix& o) const {
-        Matrix matrix;
-        auto simd1 = array2Simd();
-        auto simd2 = o.array2Simd();
-        std::array<__m128, 4> result;
-        for (int i = 0; i < 4; i++) {
-            result[i] = _mm_sub_ps(simd1[i], simd2[i]);
-        }
-        matrix.simd2Array(result);
-        return matrix;
-    }
-
-    Matrix operator*(const Matrix& o) const {
-        Matrix matrix;
-        auto simd1 = array2Simd();
-        auto simd2 = o.array2Simd();
-        std::array<__m128, 4> result;
-        for (int i = 0; i < 4; i++) {
-            result[i] = _mm_mul_ps(simd1[i], simd2[i]);
-        }
-        matrix.simd2Array(result);
-        return matrix;
-    }
-
-    Matrix operator/(const Matrix& o) const {
-        Matrix matrix;
-        auto simd1 = array2Simd();
-        auto simd2 = o.array2Simd();
-        std::array<__m128, 4> result;
-        for (int i = 0; i < 4; i++) {
-            result[i] = _mm_div_ps(simd1[i], simd2[i]);
-        }
-        matrix.simd2Array(result);
-        return matrix;
-    }
-
-    Matrix& operator+=(const Matrix& o) {
-        *this = *this + o;
-        return *this;
-    }
-
-    Matrix& operator-=(const Matrix& o) {
-        *this = *this - o;
-        return *this;
-    }
-
-    Matrix& operator*=(const Matrix& o) {
-        *this = *this * o;
-        return *this;
-    }
-
-    Matrix& operator/=(const Matrix& o) {
-        *this = *this / o;
-        return *this;
-    }
-
-    template <int Col2>
-    auto Mul(const Matrix& m) const {
-        return ::cgmath::Mul(*this, m);
-    }
-
-private:
-    std::array<float, 4 * 4> datas_;
-
-    void simd2Array(const std::array<__m128, 4>& simds) {
-        for (int i = 0; i < 4; i++) {
-            _mm_store_ps(datas_.data() + i * 4, simds[i]);
-        }
-    }
-
-    std::array<__m128, 4> array2Simd() const {
-        std::array<__m128, 4> result;
-        for (int i = 0; i < 4; i++) {
-            result[i] = _mm_setr_ps(datas_[i * 4], datas_[i * 4 + 1], datas_[i * 4 + 2], datas_[i * 4 + 3]);
-        }
-        return result;
-    }
-};
-
-
-inline Matrix<float, 4, 4> Mul(const Matrix<float, 4, 4>& m1, const Matrix<float, 4, 4>& m2) {
-    
+    return result;
 }
 
-#endif
-
+template <typename T, unsigned int Col, unsigned int Row>
+auto operator+(const Mat<T, Col, Row>& m1, const Mat<T, Col, Row>& m2) {
+    auto result = Mat<T, Col, Row>::Zeros();
+    for (unsigned int i = 0; i < Col * Row; i++) {
+        result.data[i] = m1.data[i] + m2.data[i];
+    }
+    return result;
 }
+
+template <typename T, unsigned int Col, unsigned int Row>
+auto operator-(const Mat<T, Col, Row>& m1, const Mat<T, Col, Row>& m2) {
+    auto result = Mat<T, Col, Row>::Zeros();
+    for (unsigned int i = 0; i < Col * Row; i++) {
+        result.data[i] = m1.data[i] - m2.data[i];
+    }
+    return result;
+}
+
+template <typename T, unsigned int Col, unsigned int Row>
+auto operator*(const Mat<T, Col, Row>& m, const Vec<T, Col>& v) {
+    Vec<T, Row> result;
+    for (unsigned int y = 0; y < Row; y++) {
+        T sum{};
+        for (unsigned int x = 0; x < Col; x++) {
+            sum += m.Get(x, y) * v.data[x];
+        }
+        result.data[y] = sum;
+    }
+    return result;
+}
+
+template <typename T, unsigned int Col, unsigned int Row>
+auto MulEach(const Mat<T, Col, Row>& m1, const Mat<T, Col, Row>& m2) {
+    auto result = Mat<T, Col, Row>::Zeros();
+    for (unsigned int i = 0; i < Col * Row; i++) {
+        result.data[i] = m1.data[i] * m2.data[i];
+    }
+    return result;
+}
+
+template <typename T, unsigned int Col, unsigned int Row>
+auto DivEach(const Mat<T, Col, Row>& m1, const Mat<T, Col, Row>& m2) {
+    auto result = Mat<T, Col, Row>::Zeros();
+    for (unsigned int i = 0; i < Col * Row; i++) {
+        result.data[i] = m1.data[i] / m2.data[i];
+    }
+    return result;
+}
+
+template <typename T, unsigned int Col, unsigned int Row>
+auto Transpose(const Mat<T, Col, Row>& m) {
+    auto result = Mat<T, Col, Row>::Zeros();
+    for (unsigned int x = 0; x < Col; x++) {
+        for (unsigned int y = 0; y < Row; y++) {
+            result.Set(x, y, m.Get(y, x));
+        }
+    }
+    return result;
+}
+
+using Mat22 = Mat<CGMATH_NUMERIC_TYPE, 2, 2>;
+using Mat33 = Mat<CGMATH_NUMERIC_TYPE, 3, 3>;
+using Mat44 = Mat<CGMATH_NUMERIC_TYPE, 4, 4>;
+
+}  // namespace cgmath
