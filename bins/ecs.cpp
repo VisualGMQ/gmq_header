@@ -16,7 +16,7 @@ struct Timer {
     int t;
 };
 
-void StartUpSystem(Commands& command) {
+void StartUpSystem(Commands& command, Resources) {
     command.Spawn<Name>(Name{ "person1" })
            .Spawn<Name, ID>(Name{"person2"}, ID{1})
            .Spawn<ID>(ID{2});
