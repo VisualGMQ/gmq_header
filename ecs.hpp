@@ -15,10 +15,6 @@ namespace ecs {
 using ComponentID = uint32_t;
 using Entity = uint32_t;
 
-struct Resource {};
-struct Component {};
-
-template <typename Category>
 class IndexGetter final {
 public:
     template <typename T>
@@ -289,7 +285,7 @@ public:
 
     template <typename T>
     Commands &SetResource(T &&resource) {
-        auto index = IndexGetter<Resource>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         if (auto it = world_.resources_.find(index);
             it != world_.resources_.end()) {
             assertm("resource already exists", it->second.resource);
@@ -306,7 +302,7 @@ public:
 
     template <typename T>
     Commands &RemoveResource() {
-        auto index = IndexGetter<Resource>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         destroyResources_.push_back(
             ResourceDestroyInfo(index, [](void *elem) { delete (T *)elem; }));
 
@@ -367,7 +363,7 @@ private:
     void doSpawn(Entity entity, std::vector<ComponentSpawnInfo> &spawnInfo,
                  T &&component, Remains &&...remains) {
         ComponentSpawnInfo info;
-        info.index = IndexGetter<Component>::Get<T>();
+        info.index = IndexGetter::Get<T>();
         info.create = [](void) -> void * { return new T; };
         info.destroy = [](void *elem) { delete (T *)elem; };
         info.assign = [=](void *elem) {
@@ -423,14 +419,14 @@ public:
 
     template <typename T>
     bool Has() const {
-        auto index = IndexGetter<Resource>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         auto it = world_.resources_.find(index);
         return it != world_.resources_.end() && it->second.resource;
     }
 
     template <typename T>
     T &Get() {
-        auto index = IndexGetter<Resource>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         return *((T *)world_.resources_[index].resource);
     }
 
@@ -452,14 +448,14 @@ public:
     template <typename T>
     bool Has(Entity entity) const {
         auto it = world_.entities_.find(entity);
-        auto index = IndexGetter<Component>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         return it != world_.entities_.end() &&
                it->second.find(index) != it->second.end();
     }
 
     template <typename T>
     T &Get(Entity entity) {
-        auto index = IndexGetter<Component>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         return *((T *)world_.entities_[entity][index]);
     }
 
@@ -468,7 +464,7 @@ private:
 
     template <typename T, typename... Remains>
     void doQuery(std::vector<Entity> &outEntities) const {
-        auto index = IndexGetter<Component>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         World::ComponentInfo &info = world_.componentMap_[index];
 
         for (auto e : info.sparseSet) {
@@ -482,7 +478,7 @@ private:
 
     template <typename T, typename... Remains>
     void doQueryRemains(Entity entity, std::vector<Entity> &outEntities) const {
-        auto index = IndexGetter<Component>::Get<T>();
+        auto index = IndexGetter::Get<T>();
         auto &componentContainer = world_.entities_[entity];
         if (auto it = componentContainer.find(index);
             it == componentContainer.end()) {
