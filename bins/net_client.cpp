@@ -4,7 +4,7 @@ constexpr uint16_t PORT = 8080;
 
 int main() {
     auto netInstance = net::Init();
-    auto result = net::AddrInfoBuilder::CreateTCP("", PORT).Build();
+    auto result = net::AddrInfoBuilder::CreateTCP("localhost", PORT).Build();
     if (result.result != 0) {
         std::cerr << "create TCP addrinfo failed: " << net::GetLastError() << std::endl;
     }
@@ -17,13 +17,13 @@ int main() {
     int iResult = 0;
     char buf[1024] = {0};
     auto acceptResult = socket->Accept();
+    if (acceptResult.result != 0) {
+        iResult = -1;
+    }
 
     std::cout << "accepted" << std::endl;
 
     do {
-        if (acceptResult.result != 0) {
-            break;
-        }
         auto& clientSocket = acceptResult.value;
 
         iResult = clientSocket->Recv(buf, sizeof(buf));
