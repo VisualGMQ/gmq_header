@@ -271,7 +271,7 @@ public:
     Entity SpawnAndReturn(ComponentTypes &&...components) {
         EntitySpawnInfo info;
         info.entity = EntityGenerator::Gen();
-        doSpawn<ComponentTypes...>(info.entity, info.components,
+        doSpawn<ComponentTypes...>(info.components,
                                    std::forward<ComponentTypes>(components)...);
         spawnEntities_.push_back(info);
         return info.entity;
@@ -360,20 +360,19 @@ private:
     std::vector<EntitySpawnInfo> spawnEntities_;
 
     template <typename T, typename... Remains>
-    void doSpawn(Entity entity, std::vector<ComponentSpawnInfo> &spawnInfo,
+    void doSpawn(std::vector<ComponentSpawnInfo> &spawnInfo,
                  T &&component, Remains &&...remains) {
         ComponentSpawnInfo info;
         info.index = IndexGetter::Get<T>();
         info.create = [](void) -> void * { return new T; };
         info.destroy = [](void *elem) { delete (T *)elem; };
         info.assign = [=](void *elem) {
-            static auto com = component;
-            *((T *)elem) = com;
+            *((T *)elem) = component;
         };
         spawnInfo.push_back(info);
 
         if constexpr (sizeof...(Remains) != 0) {
-            doSpawn<Remains...>(entity, spawnInfo,
+            doSpawn<Remains...>(spawnInfo,
                                 std::forward<Remains>(remains)...);
         }
     }
