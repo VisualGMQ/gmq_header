@@ -32,6 +32,9 @@ int main() {
             std::cout << "client closed" << std::endl;
         } else if (iResult > 0) {
             std::cout << "recived: " << buf << std::endl;
+            if (strcmp(buf, "quit") == 0) {
+                iResult = -1;
+            }
         }
     } while (iResult > 0);
 

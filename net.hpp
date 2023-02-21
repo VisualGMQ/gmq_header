@@ -139,9 +139,7 @@ struct Result {
     T value;
 
     Result(ErrorCodeType result, const T& value): result(result), value(value) {}
-    Result(ErrorCodeType result, T&& val): result(result), value(std::forward<T>(val)) {
-        std::cout << "herer" << std::endl;
-    }
+    Result(ErrorCodeType result, T&& val): result(result), value(std::forward<T>(val)) {}
 };
 
 struct AddrInfo;
@@ -220,6 +218,7 @@ public:
     void Close();
     Result<int, std::unique_ptr<Socket>> Accept();
     bool Valid() const;
+    int Connect();
 
     int Recv(char* buf, size_t size);
     int Send(char* buf, size_t size);
@@ -368,6 +367,10 @@ int Socket::Bind() {
 
 int Socket::Listen(int backlog) {
     return listen(s_, backlog);
+}
+
+int Socket::Connect() {
+    return connect(s_, addr_->info.ai_addr, addr_->info.ai_addrlen);
 }
 
 Result<int, std::unique_ptr<Socket>> Socket::Accept() {
