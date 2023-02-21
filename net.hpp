@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <array>
 #include <string>
+#include <utility>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -138,7 +139,9 @@ struct Result {
     T value;
 
     Result(ErrorCodeType result, const T& value): result(result), value(value) {}
-    Result(ErrorCodeType result, T&& value): result(result), value(std::move(value)) {}
+    Result(ErrorCodeType result, T&& val): result(result), value(std::forward<T>(val)) {
+        std::cout << "herer" << std::endl;
+    }
 };
 
 struct AddrInfo;
@@ -205,12 +208,17 @@ class Socket final {
 public:
     Socket(SOCKET s);
     Socket(const AddrInfo& addr);
+    Socket(Socket&&);
+    Socket(const Socket&) = delete;
     ~Socket();
+
+    Socket& operator=(Socket&&);
+    Socket& operator=(const Socket&) = delete;
 
     int Bind();
     int Listen(int backlog);
     void Close();
-    Result<int, std::unique_ptr<Socket>>&& Accept();
+    Result<int, std::unique_ptr<Socket>> Accept();
     bool Valid() const;
 
     int Recv(char* buf, size_t size);
@@ -224,6 +232,11 @@ public:
 private:
     SOCKET s_ = INVALID_SOCKET;
     const AddrInfo* addr_ = nullptr;
+
+    friend void swap(Socket& lhs, Socket& rhs) {
+        std::swap(lhs.s_, rhs.s_);
+        std::swap(lhs.addr_, rhs.addr_);
+    }
 };
 
 class Net final {
@@ -263,15 +276,15 @@ constexpr std::array<uint8_t, 2> FlagsMapper {
 // structure implement
 
 struct AddrInfo {
-    std::shared_ptr<addrinfo> info;
+    addrinfo info;
 
     AddrInfo(addrinfo* info) {
-        this->info.reset(info);
+        memcpy(&this->info, info, sizeof(addrinfo));
+        freeaddrinfo(info);
     }
 
     AddrInfo() {
-        info = std::shared_ptr<addrinfo>(new addrinfo, [](addrinfo* e) { freeaddrinfo(e); });
-        memset(info.get(), 0, sizeof(addrinfo));
+        memset(&info, 0, sizeof(addrinfo));
     }
 };
 
@@ -316,10 +329,21 @@ inline std::string_view Error2Str(int error) {
 Socket::Socket(SOCKET s) : s_(s) {}
 
 Socket::Socket(const AddrInfo &addr) : addr_(&addr) {
-    s_ = socket(addr.info->ai_family, addr.info->ai_socktype, addr.info->ai_protocol);
+    s_ = socket(addr.info.ai_family, addr.info.ai_socktype, addr.info.ai_protocol);
     if (s_ == INVALID_SOCKET) {
         std::cerr << "socket create failed" << GetLastError() << std::endl;
     }
+}
+
+Socket::Socket(Socket&& o) {
+    swap(*this, o);
+}
+
+Socket& Socket::operator=(Socket&& o) {
+    if (&o != this) {
+        swap(*this, o);
+    }
+    return *this;
 }
 
 Socket::~Socket() {
@@ -339,24 +363,21 @@ void Socket::Close() {
 }
 
 int Socket::Bind() {
-    return bind(s_, addr_->info->ai_addr, (int)addr_->info->ai_addrlen);
+    return bind(s_, addr_->info.ai_addr, (int)addr_->info.ai_addrlen);
 }
 
 int Socket::Listen(int backlog) {
     return listen(s_, backlog);
 }
 
-Result<int, std::unique_ptr<Socket>>&& Socket::Accept() {
+Result<int, std::unique_ptr<Socket>> Socket::Accept() {
     SOCKET clientSocket = accept(s_, nullptr, nullptr);
-    Result<int, std::unique_ptr<Socket>> result(0, nullptr);
     if (clientSocket == INVALID_SOCKET) {
-        result.result = WSAGetLastError();
-        std::cerr << "accept socket failed" << Error2Str(result.result) << std::endl;
-        return std::move(result);
+        int result = WSAGetLastError();
+        std::cerr << "accept socket failed" << Error2Str(result) << std::endl;
     }
-    result.value = std::make_unique<Socket>(clientSocket);
 
-    return std::move(result);
+    return Result<int, std::unique_ptr<Socket>>(0, std::make_unique<Socket>(clientSocket));
 }
 
 

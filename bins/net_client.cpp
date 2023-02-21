@@ -16,7 +16,7 @@ int main() {
 
     int iResult = 0;
     char buf[1024] = {0};
-    auto acceptResult = socket->Accept();
+    net::Result<int, std::unique_ptr<net::Socket>> acceptResult = socket->Accept();
     if (acceptResult.result != 0) {
         iResult = -1;
     }
@@ -27,12 +27,13 @@ int main() {
         auto& clientSocket = acceptResult.value;
 
         iResult = clientSocket->Recv(buf, sizeof(buf));
+        std::cout << "recived: " << iResult << std::endl;
         if (iResult == 0) {
             std::cout << "client closed" << std::endl;
         } else if (iResult > 0) {
             std::cout << "recived: " << buf << std::endl;
         }
-    } while (iResult < 0);
+    } while (iResult > 0);
 
     return 0;
 }
