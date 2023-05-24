@@ -1,3 +1,4 @@
+#define NET_IMPLEMENTATION
 #include "net.hpp"
 
 constexpr uint16_t PORT = 8080;

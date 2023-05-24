@@ -1,4 +1,11 @@
-// A thin layer for Win32 Socket
+/* A thin layer for Win32 Socket
+    usage:
+
+    ```cpp
+    #define NET_IMPLEMENTATION
+    #include "net.hpp"
+    ```
+*/ 
 #pragma once
 
 #include <winsock2.h>
@@ -133,6 +140,52 @@ enum class Flags {
     Passiv,
 };
 
+// some platform specific mapper
+
+constexpr std::array<uint8_t, 2> SockTypeMapper{
+    SOCK_STREAM,
+    SOCK_DGRAM,
+};
+
+constexpr std::array<uint8_t, 2> ProtocolMapper{
+    IPPROTO_TCP,
+    IPPROTO_UDP,
+};
+
+constexpr std::array<uint8_t, 2> FamilyMapper{
+    AF_INET,
+    AF_INET6,
+};
+
+constexpr std::array<uint8_t, 2> FlagsMapper{
+    0,
+    AI_PASSIVE,
+};
+
+
+inline std::string_view Error2Str(int error)
+{
+    return ErrorStrMap[error];
+}
+
+inline std::string_view GetLastError()
+{
+    return Error2Str(WSAGetLastError());
+}
+
+struct AddrInfo {
+    addrinfo info;
+
+    AddrInfo(addrinfo* info) {
+        memcpy(&this->info, info, sizeof(addrinfo));
+        freeaddrinfo(info);
+    }
+
+    AddrInfo() {
+        memset(&info, 0, sizeof(addrinfo));
+    }
+};
+
 template <typename ErrorCodeType, typename T>
 struct Result {
     ErrorCodeType result;
@@ -142,7 +195,6 @@ struct Result {
     Result(ErrorCodeType result, T&& val): result(result), value(std::forward<T>(val)) {}
 };
 
-struct AddrInfo;
 struct AddrInfoBuilder {
     static AddrInfoBuilder CreateTCP(const std::string& address, uint16_t port) {
         AddrInfoBuilder builder;
@@ -191,7 +243,19 @@ struct AddrInfoBuilder {
         return *this;
     }
     
-    Result<int, AddrInfo> Build();
+    Result<int, AddrInfo> Build() {
+        addrinfo hint;
+        ZeroMemory(&hint, sizeof(hint));
+        hint.ai_family = FamilyMapper[static_cast<uint8_t>(family_)];
+        hint.ai_flags = FlagsMapper[static_cast<uint8_t>(flags_)];
+        hint.ai_socktype = SockTypeMapper[static_cast<uint8_t>(socktype_)];
+        hint.ai_protocol = ProtocolMapper[static_cast<uint8_t>(protocol_)];
+
+        addrinfo* result;
+        auto port = std::to_string(port_);
+        int resultCode = getaddrinfo(address_.c_str() == "" ? nullptr : address_.c_str(), port.c_str(), &hint, &result);
+        return Result<int, AddrInfo>(resultCode, AddrInfo(result));
+    }
 
 private:
     Family family_;
@@ -204,216 +268,110 @@ private:
 
 class Socket final {
 public:
-    Socket(SOCKET s);
-    Socket(const AddrInfo& addr);
-    Socket(Socket&&);
+    Socket(SOCKET s) : s_(s) {}
+    Socket(const AddrInfo &addr) : addr_(&addr) {
+        s_ = socket(addr.info.ai_family, addr.info.ai_socktype, addr.info.ai_protocol);
+        if (s_ == INVALID_SOCKET) {
+            std::cerr << "socket create failed" << GetLastError() << std::endl;
+        }
+    }
+    Socket(Socket&& o) { swap(*this, o); }
     Socket(const Socket&) = delete;
-    ~Socket();
+    ~Socket() { Close(); }
 
-    Socket& operator=(Socket&&);
+    Socket& operator=(Socket&& o) {
+        if (&o != this) {
+            swap(*this, o);
+        }
+        return *this;
+    }
+
     Socket& operator=(const Socket&) = delete;
 
-    int Bind();
-    int Listen(int backlog);
-    void Close();
-    Result<int, std::unique_ptr<Socket>> Accept();
-    bool Valid() const;
-    int Connect();
+    int Socket::Bind() {
+        return bind(s_, addr_->info.ai_addr, (int)addr_->info.ai_addrlen);
+    }
 
-    int Recv(char* buf, size_t size);
-    int Send(char* buf, size_t size);
-    
+    int Socket::Listen(int backlog) {
+        return listen(s_, backlog);
+    }
+
+    void Close() {
+        if (Valid()) {
+            closesocket(s_);
+            s_ = INVALID_SOCKET;
+        }
+    }
+
+    Result<int, std::unique_ptr<Socket>> Accept() {
+        SOCKET clientSocket = accept(s_, nullptr, nullptr);
+        if (clientSocket == INVALID_SOCKET)
+        {
+            int result = WSAGetLastError();
+            std::cerr << "accept socket failed" << Error2Str(result) << std::endl;
+        }
+
+        return Result<int, std::unique_ptr<Socket>>(0, std::make_unique<Socket>(clientSocket));
+    }
+    bool Valid() const {
+        return s_ != INVALID_SOCKET;
+    }
+
+    int Connect() {
+        return connect(s_, addr_->info.ai_addr, addr_->info.ai_addrlen);
+    }
+
+    int Recv(char *buf, size_t size) { return recv(s_, buf, size, 0); }
+    int Send(char *buf, size_t size) { return send(s_, buf, size, 0); }
+
     template <typename T>
-    int Recv(const T& buf);
+    int Recv(const T &buf) {
+        return recv(s_, buf.data(), buf.size(), 0);
+    }
+
     template <typename T>
-    int Send(const T& buf);
+    int Send(const T &buf) {
+        return send(s_, buf.data(), buf.size(), 0);
+    }
 
 private:
     SOCKET s_ = INVALID_SOCKET;
-    const AddrInfo* addr_ = nullptr;
+    const AddrInfo *addr_ = nullptr;
 
-    friend void swap(Socket& lhs, Socket& rhs) {
+    friend void swap(Socket &lhs, Socket &rhs)
+    {
         std::swap(lhs.s_, rhs.s_);
         std::swap(lhs.addr_, rhs.addr_);
     }
 };
 
-class Net final {
+class Net final
+{
 public:
-    Net();
-    ~Net();
+    Net() {
+        WSAStartup(MAKEWORD(2, 2), &wsaData_);
+    }
 
-    Socket* CreateSocket(const AddrInfo& addr);
+    ~Net() {
+        sockets_.clear();
+        WSACleanup();
+    }
+
+    Socket *CreateSocket(const AddrInfo &addr) {
+        sockets_.push_back(std::make_unique<Socket>(addr));
+        return sockets_.back().get();
+    }
 
 private:
     WSADATA wsaData_;
     std::vector<std::unique_ptr<Socket>> sockets_;
 };
 
-// some platform specific mapper
-
-constexpr std::array<uint8_t, 2> SockTypeMapper {
-    SOCK_STREAM,
-    SOCK_DGRAM,
-};
-
-constexpr std::array<uint8_t, 2> ProtocolMapper {
-    IPPROTO_TCP,
-    IPPROTO_UDP,
-};
-
-constexpr std::array<uint8_t, 2> FamilyMapper {
-    AF_INET,
-    AF_INET6,
-};
-
-constexpr std::array<uint8_t, 2> FlagsMapper {
-    0,
-    AI_PASSIVE,
-};
-
-// structure implement
-
-struct AddrInfo {
-    addrinfo info;
-
-    AddrInfo(addrinfo* info) {
-        memcpy(&this->info, info, sizeof(addrinfo));
-        freeaddrinfo(info);
-    }
-
-    AddrInfo() {
-        memset(&info, 0, sizeof(addrinfo));
-    }
-};
-
 // function declarations
-
-std::string_view GetLastError();
-std::string_view Error2Str(int);
-
-
-[[nodiscard]] std::unique_ptr<Net> Init();
-
-// function implementations
-
-inline Result<int, AddrInfo> AddrInfoBuilder::Build() {
-    addrinfo hint;
-    ZeroMemory(&hint, sizeof(hint));
-    hint.ai_family = FamilyMapper[static_cast<uint8_t>(family_)];
-    hint.ai_flags = FlagsMapper[static_cast<uint8_t>(flags_)];
-    hint.ai_socktype = SockTypeMapper[static_cast<uint8_t>(socktype_)];
-    hint.ai_protocol = ProtocolMapper[static_cast<uint8_t>(protocol_)];
-
-    addrinfo* result;
-    auto port = std::to_string(port_);
-    int resultCode = getaddrinfo(address_.c_str() == "" ? nullptr : address_.c_str(), port.c_str(), &hint, &result);
-    return Result<int, AddrInfo>(resultCode, AddrInfo(result));
-}
 
 inline [[nodiscard]] std::unique_ptr<Net> Init()
 {
-
     return std::make_unique<Net>();
-}
-
-inline std::string_view GetLastError() {
-    return Error2Str(WSAGetLastError());
-}
-
-inline std::string_view Error2Str(int error) {
-    return ErrorStrMap[error];
-}
-
-Socket::Socket(SOCKET s) : s_(s) {}
-
-Socket::Socket(const AddrInfo &addr) : addr_(&addr) {
-    s_ = socket(addr.info.ai_family, addr.info.ai_socktype, addr.info.ai_protocol);
-    if (s_ == INVALID_SOCKET) {
-        std::cerr << "socket create failed" << GetLastError() << std::endl;
-    }
-}
-
-Socket::Socket(Socket&& o) {
-    swap(*this, o);
-}
-
-Socket& Socket::operator=(Socket&& o) {
-    if (&o != this) {
-        swap(*this, o);
-    }
-    return *this;
-}
-
-Socket::~Socket() {
-    Close();
-}
-
-
-bool Socket::Valid() const {
-    return s_ != INVALID_SOCKET;
-}
-
-void Socket::Close() {
-    if (Valid()) {
-        closesocket(s_);
-        s_ = INVALID_SOCKET;
-    }
-}
-
-int Socket::Bind() {
-    return bind(s_, addr_->info.ai_addr, (int)addr_->info.ai_addrlen);
-}
-
-int Socket::Listen(int backlog) {
-    return listen(s_, backlog);
-}
-
-int Socket::Connect() {
-    return connect(s_, addr_->info.ai_addr, addr_->info.ai_addrlen);
-}
-
-Result<int, std::unique_ptr<Socket>> Socket::Accept() {
-    SOCKET clientSocket = accept(s_, nullptr, nullptr);
-    if (clientSocket == INVALID_SOCKET) {
-        int result = WSAGetLastError();
-        std::cerr << "accept socket failed" << Error2Str(result) << std::endl;
-    }
-
-    return Result<int, std::unique_ptr<Socket>>(0, std::make_unique<Socket>(clientSocket));
-}
-
-
-int Socket::Recv(char* buf, size_t size) {
-    return recv(s_, buf, size, 0);
-}
-
-int Socket::Send(char* buf, size_t size) {
-    return send(s_, buf, size, 0);
-}
-
-template <typename T>
-int Socket::Recv(const T& buf) {
-    return recv(s_, buf.data(), buf.size(), 0);
-}
-
-template <typename T>
-int Socket::Send(const T& buf) {
-    return send(s_, buf.data(), buf.size(), 0);
-}
-
-Net::Net() {
-    WSAStartup(MAKEWORD(2, 2), &wsaData_);
-}
-
-Net::~Net() {
-    sockets_.clear();
-    WSACleanup();
-}
-
-Socket* Net::CreateSocket(const AddrInfo& addr) {
-    sockets_.push_back(std::make_unique<Socket>(addr));
-    return sockets_.back().get();
 }
 
 }
