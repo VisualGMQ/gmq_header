@@ -8,4 +8,6 @@ project(
 )
 
 enable_testing()
+add_subdirectory(3rdlibs/glfw)
+add_subdirectory(3rdlibs/glad)
 add_subdirectory(bins)
