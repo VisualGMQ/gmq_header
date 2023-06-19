@@ -16,6 +16,8 @@
 #include <array>
 #include <string>
 #include <utility>
+#include <memory>
+#include <vector>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -288,12 +290,12 @@ public:
 
     Socket& operator=(const Socket&) = delete;
 
-    int Socket::Bind() {
-        return bind(s_, addr_->info.ai_addr, (int)addr_->info.ai_addrlen);
+    int Bind() {
+        return ::bind(s_, addr_->info.ai_addr, (int)addr_->info.ai_addrlen);
     }
 
-    int Socket::Listen(int backlog) {
-        return listen(s_, backlog);
+    int Listen(int backlog) {
+        return ::listen(s_, backlog);
     }
 
     void Close() {
@@ -369,7 +371,7 @@ private:
 
 // function declarations
 
-inline [[nodiscard]] std::unique_ptr<Net> Init()
+[[ nodiscard ]] inline std::unique_ptr<Net> Init()
 {
     return std::make_unique<Net>();
 }

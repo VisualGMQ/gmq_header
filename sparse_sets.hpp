@@ -5,6 +5,7 @@
 #include <memory>
 #include <array>
 #include <cassert>
+#include <limits>
 
 template <typename T, size_t PageSize, typename = std::enable_if<std::is_integral_v<T>>>
 class SparseSets final {

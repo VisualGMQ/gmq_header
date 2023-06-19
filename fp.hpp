@@ -20,10 +20,10 @@ struct List {
 #define GList(...) List<decltype(__VA_ARGS__), __VA_ARGS__>
 
 //! @brief represent any compile-time value
-template <typename T, T value>
+template <typename T, T v>
 struct TElem {
     using type = T;
-    static constexpr T value = value;
+    static constexpr T value = v;
 };
 
 #define GTElem(x) TElem<decltype(x), x>
@@ -76,10 +76,10 @@ struct _Last<List<T, first, Remains...>> final {
 
 // concat a element to list
 template <typename T, typename T::elem_type>
-struct _Concat final {};
+struct _Concat {};
 
 template <typename T, T value, T... Remains>
-struct _Concat<List<T, Remains...>, value> final {
+struct _Concat<List<T, Remains...>, value> {
     using type = List<T, value, Remains...>;
 };
 
@@ -199,9 +199,9 @@ struct _Sum<List<T, first, Remains...>> final {
 template <typename ListT>
 struct _Maxmimum;
 
-template <typename T, T value>
-struct _Maxmimum<List<T, value>> final {
-    static constexpr T value = value;
+template <typename T, T v>
+struct _Maxmimum<List<T, v>> final {
+    static constexpr T value = v;
 };
 
 template <typename T, T first, T... Remains>
@@ -214,9 +214,9 @@ struct _Elem {
     static constexpr bool value = elem == _Head<ListT>::value ? true : _Elem<typename _Tail<ListT>::type, elem>::value;
 };
 
-template <typename T, T value, T elem>
-struct _Elem<List<T, value>, elem> {
-    static constexpr bool value = value == elem;
+template <typename T, T v, T elem>
+struct _Elem<List<T, v>, elem> {
+    static constexpr bool value = v == elem;
 };
 
 //! @brief get first element in list
@@ -235,7 +235,7 @@ using Tail = typename _Tail<ListT>::type;
 //! @warning can't compile when list is empty
 //! @tparam ListT list
 template <typename ListT>
-constexpr auto Last = typename _Last<ListT>::value;
+constexpr auto Last = _Last<ListT>::value;
 
 //! @brief judge if two lists have same elements and order
 //! @tparam ListT list
@@ -313,14 +313,14 @@ template <typename ListT,
 struct _Map;
 
 template <typename T, T value,
-            template <typename U, U value>
+            template <typename U, U>
             typename Func>
 struct _Map<List<T, value>, Func> {
     using type = List<T, Func<T, value>::value>;
 };
 
 template <typename T, T value,
-            template <typename U, U value>
+            template <typename U, U>
             typename Func,
           T... Remains>
 struct _Map<List<T, value, Remains...>, Func> {
@@ -353,14 +353,14 @@ struct _Filter<List<T, elem, Remains...>, Pred> {
                     typename _Filter<List<T, Remains...>, Pred>::type>;
 };
 
-template <typename T, T value>
+template <typename T, T v>
 struct Inc final {
-    static constexpr T value = value + 1;
+    static constexpr T value = v + 1;
 };
 
-template <typename T, T value>
+template <typename T, T v>
 struct Dec final {
-    static constexpr T value = value - 1;
+    static constexpr T value = v - 1;
 };
 
 //! @brief apply function `Func` for each element
@@ -377,14 +377,14 @@ template <typename ListT,
             typename Pred>
 using Filter = typename _Filter<ListT, Pred>::type;
 
-template <typename T, T value>
+template <typename T, T v>
 struct Odd {
-    static constexpr bool value = value % 2 == 1;
+    static constexpr bool value = v % 2 == 1;
 };
 
-template <typename T, T value>
+template <typename T, T v>
 struct Even {
-    static constexpr bool value = value % 2 == 0;
+    static constexpr bool value = v % 2 == 0;
 };
 
 }

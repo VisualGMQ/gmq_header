@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 #include <algorithm>
+#include <cstring>
 
 namespace cgmath {
 
@@ -408,7 +409,7 @@ class Vec<T, 4> final {
     Vec(T x, T y, T z) : x(x), y(y), z(z), w{} {}
     Vec(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
 
-    auto Dot(const Vec<T, 4>& o) const { return Dot(*this, o); }
+    auto Dot(const Vec<T, 4>& o) const { return cgmath::Dot(*this, o); }
 
     auto operator+=(const Vec<T, 4>& o) {
         *this = *this + o;
