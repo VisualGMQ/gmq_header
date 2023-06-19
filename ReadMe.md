@@ -19,3 +19,4 @@ cmake --build build
 |ecs.hpp|an ECS framework referenced bevy's ECS|sparse_sets.hpp|
 |sparse_sets.hpp|a sparse_set data-structure implement, [reference](https://manenko.com/2021/05/23/sparse-sets.html)|None|
 |net.hpp|a thin layer for Win32 Socket|None|
+|fp.hpp|a functional programming library referenced Haskell & Lisp.Aimed to do compile time algorithm/reflection easier.Has two implementations: pure template and constexpr function|None|
