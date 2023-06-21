@@ -39,6 +39,7 @@ TEST_CASE("list operations") {
         static_assert(tmpl::Fst<Tuple<GTElem(1), GTElem(2)>> == 1);
         static_assert(tmpl::Snd<Tuple<GTElem(1), GTElem(2)>> == 2);
         static_assert(tmpl::Eq<tmpl::Map<GList(1, 2, 3, 4), tmpl::Inc>, GList(2, 3, 4, 5)>);
+        static_assert(tmpl::Eq<tmpl::Filter<GList(1, 2, 3, 4), tmpl::Odd>, GList(1, 3)>);
     }
 
     SECTION("compile-time function implementations") {

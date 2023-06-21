@@ -327,6 +327,31 @@ struct _Map<List<T, value, Remains...>, Func> {
     using type = Concat<typename _Map<List<T, Remains...>, Func>::type, Func<T, value>::value>;
 };
 
+template <typename ListT,
+            template <typename T, T value>
+            typename Pred>
+struct _Filter;
+
+template <typename T,
+            template <typename U, U value>
+            typename Pred>
+struct _Filter<List<T>, Pred> {
+    using type = List<T>;
+};
+
+template <typename T,
+          T elem,
+            template <typename U, U value>
+            typename Pred,
+        T... Remains>
+struct _Filter<List<T, elem, Remains...>, Pred> {
+    using type = std::conditional_t<
+                    Pred<T, elem>::value,
+                    Concat<
+                        typename _Filter<List<T, Remains...>, Pred>::type,
+                        elem>,
+                    typename _Filter<List<T, Remains...>, Pred>::type>;
+};
 
 template <typename T, T value>
 struct Inc final {
@@ -341,15 +366,26 @@ struct Dec final {
 //! @brief apply function `Func` for each element
 //! @tparam Func must has template declare: `template<typename T, T value>`
 //! @tparam ListT applied list
-// template <typename ListT, typename Func>
-// using Map = typename _Map<ListT, Func>::type;
-
-
 template <typename ListT,
           template <typename T, T value>
           typename Func
         >
 using Map = typename _Map<ListT, Func>::type;
+
+template <typename ListT,
+            template <typename U, U value>
+            typename Pred>
+using Filter = typename _Filter<ListT, Pred>::type;
+
+template <typename T, T value>
+struct Odd {
+    static constexpr bool value = value % 2 == 1;
+};
+
+template <typename T, T value>
+struct Even {
+    static constexpr bool value = value % 2 == 0;
+};
 
 }
 
