@@ -22,7 +22,7 @@ void StartUpSystem(Commands& command, Resources) {
            .Spawn<ID>(ID{2});
 }
 
-void EchoNameSystem(Commands& command, Queryer query, Resources resources, Events& e) {
+void EchoNameSystem(Commands& command, Querier query, Resources resources, Events& e) {
     std::cout << "echo name system" << std::endl;
     std::vector<Entity> entities = query.Query<Name>();
     for (auto entity : entities) {
@@ -35,9 +35,9 @@ void EchoNameSystem(Commands& command, Queryer query, Resources resources, Event
     }
 }
 
-void EchoNameAndIDSystem(Commands& command, Queryer query, Resources resources, Events& e) {
+void EchoNameAndIDSystem(Commands& command, Querier query, Resources resources, Events& e) {
     std::cout << "echo name and id system" << std::endl;
-    std::vector<Entity> entities = query.Query<Name, ID>();
+    std::vector<Entity> entities = query.Query<With<Name, ID>>();
     for (auto entity : entities) {
         std::cout << query.Get<Name>(entity).name << ", " << query.Get<ID>(entity).id << std::endl;
     }
@@ -50,7 +50,7 @@ void EchoNameAndIDSystem(Commands& command, Queryer query, Resources resources, 
 
 bool canWrite = true;
 
-void EchoIDSystem(Commands& command, Queryer query, Resources resources, Events& e) {
+void EchoIDSystem(Commands& command, Querier query, Resources resources, Events& e) {
     std::cout << "echo id system" << std::endl;
     std::vector<Entity> entities = query.Query<ID>();
     for (auto entity : entities) {
@@ -63,7 +63,7 @@ void EchoIDSystem(Commands& command, Queryer query, Resources resources, Events&
     }
 }
 
-void EchoTimeSystem(Commands& command, Queryer query, Resources resources, Events& e) {
+void EchoTimeSystem(Commands& command, Querier query, Resources resources, Events& e) {
     std::cout << "echo time system" << std::endl;
     std::cout << resources.Get<Timer>().t << std::endl;
 
