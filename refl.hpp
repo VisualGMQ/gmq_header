@@ -10,6 +10,9 @@
 //! @namespace refl
 namespace refl {
 
+template <typename... Args>
+struct ElemList {};
+
 template <typename T>
 struct TypeInfoBase {
     using classType = T;
@@ -128,14 +131,34 @@ struct TypeInfo;
 
 // some helper macros for reflect class more easier
 
-#define REFL_CLASS(clazz) \
+#define ReflClass(clazz) \
 template <> \
-struct refl::TypeInfo<clazz>: public TypeInfoBase<clazz> { \
-    static constexpr auto info = std::tuple{
+struct refl::TypeInfo<clazz>: public TypeInfoBase<clazz>
 
-#define FIELD(name, type) refl::FieldInfo<void, decltype(type)>(name, type)
-#define ATTR_FIELD(attrs, name, type) refl::FieldInfo<attrs, decltype(type)>(name, type)
+#define Fields(...) static constexpr auto fields = std::tuple{ __VA_ARGS__ };
+#define Constructors(...) using constructors = ElemList<__VA_ARGS__>;
 
-#define REFL_END() };};
+#define Field(name, type) refl::FieldInfo<void, decltype(type)>(name, type)
+#define AttrField(attrs, name, type) refl::FieldInfo<attrs, decltype(type)>(name, type)
+
+// some other help functions:
+
+template <size_t Idx, typename... Args>
+constexpr int _countOverloadFunctionNum(const std::string_view name, const std::tuple<Args...> fields) {
+    if constexpr (Idx >= sizeof...(Args)) {
+        return 0;
+    } else {
+        return (std::get<Idx>(fields).name == name ? 1 : 0) + _countOverloadFunctionNum<Idx + 1>(name, fields);
+    }
+}
+
+//! @brief Judge whether a class function has overloadd
+//! @tparam Class class you reflected
+//! @param name  function name
+//! @return 
+template <typename Class>
+constexpr bool HasOverloadFunction(const std::string_view name) {
+    return _countOverloadFunctionNum<0>(name, refl::TypeInfo<Class>::fields) > 1;
+}
 
 }  // namespace refl

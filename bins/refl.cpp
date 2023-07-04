@@ -9,22 +9,33 @@ struct TestClass final {
 
     static int StaticFunc(float, double) { return 123; }
     std::string MemberFunc(double&, char&&) { return ""; }
+
+    void OverloadFunc(int) {}
+    void OverloadFunc(double) {}
+
+    TestClass(float) {}
+    TestClass(double) {}
 };
 
-REFL_CLASS(TestClass)
-    FIELD("fvalue", &TestClass::fvalue),
-    FIELD("dvalue", &TestClass::dvalue),
-    FIELD("StaticFunc", TestClass::StaticFunc),
-    FIELD("MemberFunc", &TestClass::MemberFunc),
-REFL_END()
+ReflClass(TestClass) {
+    Constructors(TestClass(float), TestClass(double))
+    Fields(
+        Field("fvalue", &TestClass::fvalue),
+        Field("dvalue", &TestClass::dvalue),
+        Field("StaticFunc", TestClass::StaticFunc),
+        Field("MemberFunc", &TestClass::MemberFunc),
+        Field("OverloadFunc", static_cast<void(TestClass::*)(int)>(&TestClass::OverloadFunc)),
+        Field("OverloadFunc", static_cast<void(TestClass::*)(double)>(&TestClass::OverloadFunc)),
+    )
+};
 
 TEST_CASE("reflection") {
     constexpr auto info = refl::TypeInfo<TestClass>();
     static_assert(std::is_same_v<decltype(info)::classType, TestClass>);
 
     SECTION("member1") {
-        constexpr auto& member = std::get<0>(info.info);
-        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<0>(info.info))>>;
+        constexpr auto& member = std::get<0>(info.fields);
+        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<0>(info.fields))>>;
         static_assert(member.isStatic == false);
         static_assert(std::is_same_v<type::type, float>);
         static_assert(member.name == "fvalue");
@@ -32,8 +43,8 @@ TEST_CASE("reflection") {
     }
 
     SECTION("member2") {
-        constexpr auto& member = std::get<1>(info.info);
-        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<1>(info.info))>>;
+        constexpr auto& member = std::get<1>(info.fields);
+        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<1>(info.fields))>>;
         static_assert(member.isStatic == false);
         static_assert(member.name == "dvalue");
         static_assert(std::is_same_v<type::type, double>);
@@ -41,8 +52,8 @@ TEST_CASE("reflection") {
     }
 
     SECTION("static function") {
-        constexpr auto& member = std::get<2>(info.info);
-        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<2>(info.info))>>;
+        constexpr auto& member = std::get<2>(info.fields);
+        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<2>(info.fields))>>;
         static_assert(member.isStatic == true);
         static_assert(member.name == "StaticFunc");
         static_assert(std::is_same_v<type::returnType, int>);
@@ -51,12 +62,14 @@ TEST_CASE("reflection") {
     }
 
     SECTION("member function") {
-        constexpr auto member = std::get<3>(info.info);
-        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<3>(info.info))>>;
+        constexpr auto member = std::get<3>(info.fields);
+        using type = std::remove_const_t<std::remove_reference_t<decltype(std::get<3>(info.fields))>>;
         static_assert(member.isStatic == false);
         static_assert(member.name == "MemberFunc");
         static_assert(std::is_same_v<type::returnType, std::string>);
         static_assert(std::is_same_v<type::params, std::tuple<double&, char&&>>);
         static_assert(member.pointer == &TestClass::MemberFunc);
+        static_assert(!refl::HasOverloadFunction<TestClass>("MemberFunc"));
+        static_assert(refl::HasOverloadFunction<TestClass>("OverloadFunc"));
     }
 }
