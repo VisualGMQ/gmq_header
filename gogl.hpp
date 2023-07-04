@@ -3,6 +3,8 @@
 #include "glad/glad.h"
 #include "log.hpp"
 #include "cgmath.hpp"
+#include <unordered_map>
+#include <optional>
 
 /******** some macro to make opengl call safer *********/
 
@@ -60,6 +62,14 @@ public:
         Fragment,
     };
 
+    static auto CreateVertexShader(const std::string& code) {
+        return ShaderModule(Type::Vertex, code);
+    }
+
+    static auto CreateFragmentShader(const std::string& code) {
+        return ShaderModule(Type::Fragment, code);
+    }
+
     ShaderModule(Type type, const std::string& code): type_(type) {
         id_ = glCreateShader(type2gl(type));
         const char* source = code.c_str();
@@ -74,6 +84,7 @@ public:
             LOGF("[GL] :", type2gl(type), " shader compile failed:\r\n", infoLog);
         }
     }
+
     ~ShaderModule() {
         GL_CALL(glDeleteShader(id_));
     }
@@ -96,7 +107,6 @@ private:
         }
         return "Unkown";
     }
-
 };
 
 class Shader final {
@@ -192,3 +202,222 @@ private:
         return "Unknown";
     }
 };
+
+/************ texture *****************/
+enum class TextureWrapperType {
+    Repeat = GL_REPEAT,
+    MirroredRepeat = GL_MIRRORED_REPEAT,
+    ClampToEdge = GL_CLAMP_TO_EDGE,
+    ClampToBorder = GL_CLAMP_TO_BORDER,
+};
+
+enum class TextureFilerType {
+    Nearest = GL_NEAREST,
+    Linear = GL_LINEAR,
+
+    LinearMipmapLinear = GL_LINEAR_MIPMAP_LINEAR,
+    LinearMipmapNearest = GL_LINEAR_MIPMAP_NEAREST,
+    NearestMipmapLinear = GL_NEAREST_MIPMAP_LINEAR,
+    NearestMipmapNearest = GL_NEAREST_MIPMAP_NEAREST,
+};
+
+struct Sampler final {
+    struct {
+        std::optional<TextureWrapperType> s, r, t;
+        float borderColor[4] = {1, 1, 1, 1};
+
+        bool NeedBorderColor() const {
+            return s == TextureWrapperType::ClampToBorder ||
+                    r == TextureWrapperType::ClampToBorder ||
+                    t == TextureWrapperType::ClampToBorder;
+        }
+    } wrapper;
+    struct {
+        std::optional<TextureFilerType> min, mag;
+    } filter;
+    bool mipmap;
+};
+
+enum class Format {
+    RED = GL_RED,
+    RG = GL_RG,
+    RGB = GL_RGB,
+    BGR = GL_BGR,
+    RGBA = GL_RGBA,
+    BGRA = GL_BGRA,
+    RED_INTEGER = GL_RED_INTEGER,
+    RG_INTEGER = GL_RG_INTEGER,
+    RGB_INTEGER = GL_RGB_INTEGER,
+    BGR_INTEGER = GL_BGR_INTEGER,
+    RGBA_INTEGER = GL_RGBA_INTEGER,
+    BGRA_INTEGER = GL_BGRA_INTEGER,
+    STENCIL_INDEX = GL_STENCIL_INDEX,
+    DEPTH_COMPONENT = GL_DEPTH_COMPONENT,
+    DEPTH_STENCIL = GL_DEPTH_STENCIL
+};
+
+class Texture final {
+public:
+    enum class Type {
+        Dimension2 = GL_TEXTURE_2D,
+        // TODO: do other type support later
+        // Dimension3 = GL_TEXTURE_3D,
+    };
+
+    Texture(Type type, void* pixels, int w, int h, const Sampler& sampler, Format out, Format inner): type_(type) {
+        GL_CALL(glGenTextures(1, &id_));
+        Bind();
+        if (sampler.wrapper.s) {
+            GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(sampler.wrapper.s.value())));   
+        }
+        if (sampler.wrapper.r) {
+            GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, static_cast<GLint>(sampler.wrapper.r.value())));   
+        }
+        if (sampler.wrapper.t) {
+            GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLint>(sampler.wrapper.t.value())));   
+        }
+        if (sampler.wrapper.NeedBorderColor()) {
+            GL_CALL(glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, sampler.wrapper.borderColor));
+        }
+        if (sampler.filter.min) {
+            GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(sampler.filter.min.value())));
+        }
+        if (sampler.filter.mag) {
+            GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(sampler.filter.mag.value())));
+        }
+        GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0,
+                     static_cast<GLint>(inner),
+                     w, h,
+                     sampler.wrapper.NeedBorderColor(),
+                     static_cast<GLint>(inner),
+                     GL_UNSIGNED_BYTE,
+                     pixels));
+        if (sampler.mipmap) {
+            GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
+        }
+    }
+
+    void Bind(int slot = 0) const {
+        GL_CALL(glActiveTexture(GL_TEXTURE0 + slot));
+        GL_CALL(glBindTexture(GL_TEXTURE_2D, id_));
+    }
+
+    void Unbind() const {
+        GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
+    }
+
+    ~Texture() {
+        GL_CALL(glDeleteTextures(1, &id_));
+    }
+
+private:
+    GLuint id_;
+    Type type_;
+};
+
+/************ buffer layout *****************/
+struct Attribute final {
+    enum class Type {
+        Vec2,
+        Vec3,
+        Vec4,
+        Mat2, 
+        Mat3,
+        Mat4
+    } type;
+    int location;
+    size_t offset;
+
+    Attribute(Type type, int location, size_t offset) : type(type), location(location), offset(offset) {}
+    Attribute(Type type, int location) : type(type), location(location), offset(0) {}
+};
+
+inline size_t GetAttributeTypeSize(Attribute::Type type) {
+    switch (type) {
+        case Attribute::Type::Vec2: return 2 * 4;
+        case Attribute::Type::Vec3: return 3 * 4;
+        case Attribute::Type::Vec4: return 4 * 4;
+        case Attribute::Type::Mat2: return 4 * 2 * 2;
+        case Attribute::Type::Mat3: return 4 * 3 * 3;
+        case Attribute::Type::Mat4: return 4 * 4 * 4;
+    }
+    LOGW("[Attribute Type]: Unknown attribute type");
+    return 0;
+}
+
+class BufferLayout final {
+public:
+    static auto CreateFromTypes(const std::initializer_list<Attribute::Type>& types) {
+        std::vector<Attribute> attrs;
+        int i = 0;
+        size_t offset = 0;
+        for (auto type : types) {
+            size_t size = GetAttributeTypeSize(type);
+            attrs.push_back(Attribute(type, i++, offset));
+            offset += size;
+        }
+
+        return BufferLayout(std::move(attrs));
+    }
+
+    static auto CreateFromUnoffsetAttrs(const std::initializer_list<Attribute>& attrs) {
+        std::vector<Attribute> attributes;
+        int i = 0;
+        size_t offset = 0;
+        for (auto attr : attrs) {
+            size_t size = GetAttributeTypeSize(attr.type);
+            attributes.push_back(Attribute(attr.type, i++, offset));
+            offset += size;
+        }
+
+        return BufferLayout(std::move(attrs));
+    }
+
+    static auto CreateFromAttrs(const std::initializer_list<Attribute>& attrs) {
+        return BufferLayout(attrs);
+    }
+
+    BufferLayout(std::vector<Attribute>&& attrs): attributes_(std::move(attrs)) {}
+    BufferLayout(const std::vector<Attribute>& attrs): attributes_(attrs) {}
+
+private:
+    std::vector<Attribute> attributes_;
+};
+
+/************ abstract resource manager *****************/
+
+template <typename T>
+class ResManager {
+public:
+    template <typename... Args>
+    T& Create(const std::string& name, Args&&... args) {
+        auto result = resources_.emplace(std::piecewise_construct,
+            std::forward_as_tuple(name),
+            std::forward_as_tuple(std::forward<Args>(args)...)
+        );
+        if (!result.second) {
+            LOGE("[ResManager]: emplace %s failed! Maybe C++ inner error", name.c_str());
+        }
+        return *result.first;
+    }
+
+    void Destory(const std::string& name) {
+        resources_.erase(name);
+    }
+
+    T* Find(const std::string& name) {
+        if (auto it = resources_.find(name); it != resources_.end()) {
+            return it.second;
+        }
+        return nullptr;
+    }
+
+    virtual ~ResManager() { resources_.clear(); }
+
+private:
+    std::unordered_map<std::string, T> resources_;
+};
+
+class ShaderManager: public ResManager<Shader> {};
+class BufferManager: public ResManager<Buffer> {};
+class TextureManager: public ResManager<Texture> {};
