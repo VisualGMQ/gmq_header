@@ -7,5 +7,8 @@ project(
     LANGUAGES CXX
 )
 
+add_subdirectory(3rdlibs/sol)
+add_subdirectory(3rdlibs/lua)
+
 enable_testing()
 add_subdirectory(bins)

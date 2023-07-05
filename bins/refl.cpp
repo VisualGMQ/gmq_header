@@ -17,6 +17,17 @@ struct TestClass final {
     TestClass(double) {}
 };
 
+/*
+template <>
+struct refl::TypeInfo<TestClass>: public TypeInfoBase<TestClass> {
+    using constructors = ElemList<TestClass(float), TestClass(double)>;
+    static constexpr auto fields = std::tuple{
+        refl::FieldInfo<void, decltype(&TestClass::fvalue)>("fvalue", &TestClass::fvalue),
+        refl::FieldInfo<void, decltype(&TestClass::MemberFunc)>("MemberFunc", &TestClass::MemberFunc),
+    };
+};
+*/
+
 ReflClass(TestClass) {
     Constructors(TestClass(float), TestClass(double))
     Fields(
