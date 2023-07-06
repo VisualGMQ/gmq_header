@@ -62,6 +62,31 @@ struct FuncInfo: public FuncInfoBase<Ret, Class, Params...> {
     std::string_view name;
 };
 
+//! @brief a help function to check all function types are static functions
+template <typename T, typename... Remains>
+struct IsAllStaticFunc {
+    static constexpr bool value = std::is_member_function_pointer_v<T> && IsAllStaticFunc<Remains...>::value;
+};
+
+template <typename T>
+struct IsAllStaticFunc<T> {
+    static constexpr bool value = std::is_member_function_pointer_v<T>;
+};
+
+template <typename... Attrs>
+struct AttrList {};
+
+//! @brief record overload functions
+template <typename... Funcs>
+struct OverloadFuncs {
+    using attrs = AttrList<void>;   // FIXME: deduce from tyemplate parameter will cause error(I don't know why)
+    static constexpr bool isStatic = IsAllStaticFunc<Funcs...>::value;
+    constexpr OverloadFuncs(std::string_view name, Funcs... funcs): name(name), funcs{funcs...} {}
+
+    std::string_view name;
+    const std::tuple<Funcs...> funcs;
+};
+
 //! @brief variable information
 //! @tparam Type variable type
 //! @tparam Class if variable is class member, give the class type, or give void
@@ -95,9 +120,6 @@ struct VariableInfo<Type, void> {
 };
 
 
-template <typename... Attrs>
-struct AttrList {};
-
 //! @brief field information(member/non-member function, variable)
 //! @tparam Attr some custom attribute binding on this field
 //! @tparam T 
@@ -107,6 +129,15 @@ struct FieldInfo: public VariableInfo<T, void> {
     using pointerType = T*;
 
     explicit constexpr FieldInfo(std::string_view name, pointerType ptr): VariableInfo<T, void>(name, ptr) { }
+};
+
+// specialize for member variable
+template <typename AttrList, typename Type, typename Class>
+struct FieldInfo<AttrList, Type(Class::*)>: public VariableInfo<Type, Class> {
+    using attrs = AttrList;
+    using pointerType = Type Class::*;
+
+    constexpr FieldInfo(std::string_view name, pointerType ptr): VariableInfo<Type, Class>(name, ptr) { }
 };
 
 // specialize for non-member function
@@ -127,15 +158,6 @@ struct FieldInfo<AttrList, Ret(Class::*)(Params...)>: public FuncInfo<Ret, Class
     explicit constexpr FieldInfo(std::string_view name, pointerType ptr): FuncInfo<Ret, Class, Params...>(name, ptr) { }
 };
 
-// specialize for member variable
-template <typename AttrList, typename Type, typename Class>
-struct FieldInfo<AttrList, Type(Class::*)>: public VariableInfo<Type, Class> {
-    using attrs = AttrList;
-    using pointerType = Type Class::*;
-
-    constexpr FieldInfo(std::string_view name, pointerType ptr): VariableInfo<Type, Class>(name, ptr) { }
-};
-
 template <typename T>
 struct TypeInfo;
 
@@ -148,27 +170,20 @@ struct refl::TypeInfo<clazz>: public TypeInfoBase<clazz>
 #define Fields(...) static constexpr auto fields = std::tuple{ __VA_ARGS__ };
 #define Constructors(...) using constructors = ElemList<__VA_ARGS__>;
 
-#define Field(name, type) refl::FieldInfo<void, decltype(type)>(name, type)
+#define Attrs(...) refl::AttrList<__VA_ARGS__>
+#define Field(name, type) refl::FieldInfo<Attrs(void), decltype(type)>(name, type)
 #define AttrField(attrs, name, type) refl::FieldInfo<attrs, decltype(type)>(name, type)
+#define Overload(name, ...) refl::OverloadFuncs(name, __VA_ARGS__)
 
-// some other help functions:
+//! @brief a help structure for check if field is overload function
+template <typename T>
+struct IsOverloadFunctions {
+    constexpr static bool value = false;
+};
 
-template <size_t Idx, typename... Args>
-constexpr int _countOverloadFunctionNum(std::string_view name, std::tuple<Args...> fields) {
-    if constexpr (Idx >= sizeof...(Args)) {
-        return 0;
-    } else {
-        return (std::get<Idx>(fields).name == name ? 1 : 0) + _countOverloadFunctionNum<Idx + 1>(name, fields);
-    }
-}
-
-//! @brief Judge whether a class function has overloadd
-//! @tparam Class class you reflected
-//! @param name  function name
-//! @return 
-template <typename Class>
-constexpr bool HasOverloadFunction(std::string_view name) {
-    return _countOverloadFunctionNum<0>(name, refl::TypeInfo<Class>::fields) > 1;
-}
+template <typename... Args>
+struct IsOverloadFunctions<OverloadFuncs<Args...>> {
+    constexpr static bool value = true;
+};
 
 }  // namespace refl
