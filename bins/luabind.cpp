@@ -38,8 +38,10 @@ ReflClass(TestClass) {
 };
 
 int main() {
-    sol::state script = luabind::BindClass<TestClass>("TestClass");
-    script.do_string(R"(
+    sol::state lua;
+    lua.open_libraries(sol::lib::base);
+    luabind::BindClass<TestClass>(lua, "TestClass");
+    lua.do_string(R"(
         local a = TestClass.new(123)
         print(a:GetValue())
         print(a.value)

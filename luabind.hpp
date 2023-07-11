@@ -18,9 +18,7 @@ struct LuaBindName final {
 };
 
 template <typename T>
-sol::state BindClass(std::string_view name) {
-    sol::state lua;
-    lua.open_libraries(sol::lib::base);
+void BindClass(sol::state& lua, std::string_view name) {
     sol::usertype<T> usertype;
     using ClassInfo = refl::TypeInfo<T>;
     if constexpr(ClassInfo::constructors::size != 0) {
@@ -28,7 +26,6 @@ sol::state BindClass(std::string_view name) {
         usertype = std::move(_CtorBindHelper<T, typename ClassInfo::constructors>::BindAndCreate(name, lua));
     }
     _bindFields<ClassInfo>(usertype);
-    return lua;
 }
 
 template <typename T, typename CtorList>
