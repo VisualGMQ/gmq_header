@@ -26,3 +26,9 @@ if (WIN32)
     AddExample(net_echo_client)
     AddExample(net_echo_server)
 endif()
+
+AddExample(gogl_triangle)
+target_link_libraries(gogl_triangle PRIVATE glad glfw)
+
+AddExample(gogl_compute)
+target_link_libraries(gogl_compute PRIVATE glad glfw)

@@ -21,3 +21,4 @@ cmake --build build
 |net.hpp|a thin layer for Win32 Socket|None|
 |fp.hpp|a functional programming library referenced Haskell & Lisp.Aimed to do compile time algorithm/reflection easier.Has two implementations: pure template and constexpr function|None|
 |refl|static reflection in compile-time|None|
+|gogl.hpp|a thin layer for OpenGL 4.3|log.hpp & cgmath.hpp & any opengl loader(glew, glad). Test dependents on glad and glfw(in `3rdlibs/`)|
