@@ -21,9 +21,8 @@ AddExample(sparse_sets)
 AddExample(net_echo_client)
 AddExample(net_echo_server)
 
-add_executable(gogl gogl.cpp)
-target_include_directories(gogl PRIVATE ../)
-target_link_libraries(gogl PRIVATE glad glfw)
-target_compile_features(gogl PRIVATE cxx_std_17)
-add_test(NAME "gogl_test"
-            COMMAND $<TARGET_FILE:gogl>)
+AddExample(gogl_triangle)
+target_link_libraries(gogl_triangle PRIVATE glad glfw)
+
+AddExample(gogl_compute)
+target_link_libraries(gogl_compute PRIVATE glad glfw)

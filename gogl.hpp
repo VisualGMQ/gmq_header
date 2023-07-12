@@ -49,6 +49,16 @@ inline const char* GLError2Str(GLenum error) {
     } \
 } while(0)
 
+#define GL_RET_CALL(expr) [&]() { \
+    GLClearError(); \
+    auto value = expr; \
+    GLenum e = glGetError(); \
+    if (e != GL_NO_ERROR) { \
+        LOGE("[GL]: ", GLError2Str(e)); \
+    } \
+    return value; \
+}()
+
 /************ Shader *****************/
 
 class Shader;
@@ -60,6 +70,7 @@ public:
     enum class Type {
         Vertex,
         Fragment,
+        Compute,
     };
 
     static auto CreateVertexShader(const std::string& code) {
@@ -69,6 +80,13 @@ public:
     static auto CreateFragmentShader(const std::string& code) {
         return ShaderModule(Type::Fragment, code);
     }
+
+    static auto CreateComputeShader(const std::string& code) {
+        return ShaderModule(Type::Compute, code);
+    }
+
+    ShaderModule(const ShaderModule&) = delete;
+    ShaderModule& operator=(const ShaderModule&) = delete;
 
     ShaderModule(Type type, const std::string& code): type_(type) {
         id_ = glCreateShader(type2gl(type));
@@ -97,6 +115,7 @@ private:
         switch (type) {
             case ShaderModule::Type::Vertex: return GL_VERTEX_SHADER;
             case ShaderModule::Type::Fragment: return GL_FRAGMENT_SHADER;
+            case ShaderModule::Type::Compute: return GL_COMPUTE_SHADER;
         }
     }
 
@@ -109,10 +128,85 @@ private:
     }
 };
 
+enum class PrimitiveType {
+    Points,
+    LineStrip,
+    LineLoop,
+    Lines,
+    LineStripAdjacency,
+    LinesAdjacency,
+    TriangleStrip,
+    TriangleFan,
+    Triangles,
+    TriangleStripAdjacency,
+    TrianglesAdjacency,
+    Patches,
+};
+
+inline GLenum Primitive2GL(PrimitiveType type) {
+    switch (type) {
+        case PrimitiveType::Points : return GL_POINTS;
+        case PrimitiveType::LineStrip : return GL_LINE_STRIP;
+        case PrimitiveType::LineLoop : return GL_LINE_LOOP;
+        case PrimitiveType::Lines : return GL_LINES;
+        case PrimitiveType::LineStripAdjacency : return GL_LINE_STRIP_ADJACENCY;
+        case PrimitiveType::LinesAdjacency : return GL_LINES_ADJACENCY;
+        case PrimitiveType::TriangleStrip : return GL_TRIANGLE_STRIP;
+        case PrimitiveType::TriangleFan : return GL_TRIANGLE_FAN;
+        case PrimitiveType::Triangles : return GL_TRIANGLES;
+        case PrimitiveType::TriangleStripAdjacency : return GL_TRIANGLE_STRIP_ADJACENCY;
+        case PrimitiveType::TrianglesAdjacency : return GL_TRIANGLES_ADJACENCY;
+        case PrimitiveType::Patches : return GL_PATCHES;
+    }
+}
+
+enum BarrierType {
+    AtomicCounter,
+    Framebuffer,
+    ShaderImageAccess,
+    ShaderStorage,
+    TextureFetch,
+    Uniform,
+};
+
+inline GLenum Barrier2GL(BarrierType type) {
+    switch (type) {
+        case BarrierType::AtomicCounter: return GL_ATOMIC_COUNTER_BARRIER_BIT;
+        case BarrierType::Framebuffer: return GL_FRAMEBUFFER_BARRIER_BIT;
+        case BarrierType::ShaderImageAccess: return GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
+        case BarrierType::ShaderStorage: return GL_SHADER_STORAGE_BARRIER_BIT;
+        case BarrierType::TextureFetch: return GL_TEXTURE_FETCH_BARRIER_BIT;
+        case BarrierType::Uniform: return GL_UNIFORM_BARRIER_BIT;
+    }
+}
+
 class Shader final {
 public:
-    Shader(const ShaderModule& vertex, const ShaderModule& fragment) {
-        id_ = glCreateProgram();
+    static Shader CreateGraphics(const ShaderModule& vertex, const ShaderModule& fragment) {
+        return Shader(vertex, fragment);
+    }
+
+    static Shader CreateCompute(const ShaderModule& compute) {
+        return Shader(compute);
+    }
+
+    Shader(const ShaderModule& compute): type_(Type::Compute) {
+        id_ = GL_RET_CALL(glCreateProgram());
+
+        GL_CALL(glAttachShader(id_, compute.id_));
+        GL_CALL(glLinkProgram(id_));
+
+        int success;
+        char infoLog[1024];
+        GL_CALL(glGetProgramiv(id_, GL_LINK_STATUS, &success));
+        if(!success) {
+            glGetProgramInfoLog(id_, 1024, NULL, infoLog);
+            LOGF("[GL]: shader link failed:\r\n", infoLog);
+        }
+    }
+
+    Shader(const ShaderModule& vertex, const ShaderModule& fragment): type_(Type::Graphics) {
+        id_ = GL_RET_CALL(glCreateProgram());
 
         GL_CALL(glAttachShader(id_, vertex.id_));
         GL_CALL(glAttachShader(id_, fragment.id_));
@@ -126,15 +220,20 @@ public:
             LOGF("[GL]: shader link failed:\r\n", infoLog);
         }
     }
+
+    Shader(const Shader&) = delete;
+    Shader& operator=(const Shader&) = delete;
+
     ~Shader() {
         GL_CALL(glDeleteProgram(id_));
     }
 
-    void Use() { GL_CALL(glUseProgram(id_)); }
-    void Unuse() { GL_CALL(glUseProgram(0)); }
+    void Use() const { GL_CALL(glUseProgram(id_)); }
+    void Unuse() const { GL_CALL(glUseProgram(0)); }
 
     void SetMat4(std::string_view name, const cgmath::Mat44& m) {
-        auto loc = glGetUniformLocation(id_, name.data());
+        Use();
+        auto loc = GL_RET_CALL(glGetUniformLocation(id_, name.data()));
         if (loc == -1) {
             LOGE("[GL]: don't has uniform ", name);
         } else {
@@ -143,7 +242,8 @@ public:
     }
 
     void SetVec3(std::string_view name, const cgmath::Vec3& v) {
-        auto loc = glGetUniformLocation(id_, name.data());
+        Use();
+        auto loc = GL_RET_CALL(glGetUniformLocation(id_, name.data()));
         if (loc == -1) {
             LOGE("[GL]: don't has uniform ", name);
         } else {
@@ -151,56 +251,225 @@ public:
         }
     }
 
+    void SetInt(std::string_view name, int value) {
+        Use();
+        auto loc = GL_RET_CALL(glGetUniformLocation(id_, name.data()));
+        if (loc == -1) {
+            LOGE("[GL]: don't has uniform ", name);
+        } else {
+            GL_CALL(glUniform1i(loc, value));
+        }
+    }
+
+    void DrawArray(PrimitiveType type, uint64_t first, uint64_t count) {
+        if (type_ != Type::Graphics) {
+            LOGE("[Shader]: your shader isn't graphics shader");
+        } else {
+            GL_CALL(glDrawArrays(Primitive2GL(type), first, count));
+        }
+    }
+
+    void DispatchCompute(uint64_t x, uint64_t y, uint64_t z) {
+        if (type_ != Type::Compute) {
+            LOGE("[Shader]: your shader isn't graphics shader");
+        } else {
+            GL_CALL(glDispatchCompute(x, y, z));
+        }
+    }
+
+    void WaitMemoryBarrier(BarrierType type) {
+        GL_CALL(glMemoryBarrier(Barrier2GL(type)));
+    }
+
 private:
     GLuint id_ = 0;
+
+    enum Type {
+        Graphics,
+        Compute,
+    } type_;
 };
 
 /************ Buffer *****************/
+enum class BufferType {
+    Array,
+    Element,
+    ShaderStorage,
+    AtomicCounter,
+    CopyRead,
+    CopyWrite,
+    DispatchIndirect,
+    DrawIndirect,
+    PixelPack,
+    PixelUnpack,
+    QueryBuffer,
+    TextureBuffer,
+    TransformFeedback,
+    UniformBuffer,
+};
+
+inline GLenum BufferType2GL(BufferType type) {
+    switch (type) {
+        case BufferType::Array: return GL_ARRAY_BUFFER;
+        case BufferType::Element: return GL_ELEMENT_ARRAY_BUFFER;
+        case BufferType::ShaderStorage: return GL_SHADER_STORAGE_BUFFER;
+        case BufferType::AtomicCounter: return GL_ATOMIC_COUNTER_BUFFER;
+        case BufferType::CopyRead: return GL_COPY_READ_BUFFER;
+        case BufferType::CopyWrite: return GL_COPY_WRITE_BUFFER;
+        case BufferType::DispatchIndirect: return GL_DISPATCH_INDIRECT_BUFFER;
+        case BufferType::DrawIndirect: return GL_DRAW_INDIRECT_BUFFER;
+        case BufferType::PixelPack: return GL_PIXEL_PACK_BUFFER;
+        case BufferType::PixelUnpack: return GL_PIXEL_UNPACK_BUFFER;
+        case BufferType::QueryBuffer: return GL_QUERY_BUFFER;
+        case BufferType::TextureBuffer: return GL_TEXTURE_BUFFER;
+        case BufferType::TransformFeedback: return GL_TRANSFORM_FEEDBACK_BUFFER;
+        case BufferType::UniformBuffer: return GL_UNIFORM_BUFFER;
+    }
+}
+
+inline std::string_view BufferType2Str(BufferType type) {
+    switch (type) {
+        case BufferType::Array: return "Array";
+        case BufferType::Element: return "Element";
+        case BufferType::ShaderStorage: return "ShaderStorage";
+        case BufferType::AtomicCounter: return "AtomicCounter";
+        case BufferType::CopyRead: return "CopyRead";
+        case BufferType::CopyWrite: return "CopyWrite";
+        case BufferType::DispatchIndirect: return "DispatchIndirect";
+        case BufferType::DrawIndirect: return "DrawIndirect";
+        case BufferType::PixelPack: return "PixelPack";
+        case BufferType::PixelUnpack: return "PixelUnpack";
+        case BufferType::QueryBuffer: return "QueryBuffer";
+        case BufferType::TextureBuffer: return "TextureBuffer";
+        case BufferType::TransformFeedback: return "TransformFeedback";
+        case BufferType::UniformBuffer: return "UniformBuffer";
+    }
+    return "Unknown";
+}
+
 class Buffer final {
 public:
-    enum Type {
-        Array,
-        Element,
+    enum Access {
+        ReadOnly,
+        WriteOnly,
+        ReadWrite,
+
+        InvalidRange,
+        InvalidBuffer,
+        FlushExplicit,
     };
 
-    Buffer(Type type) {
+    struct MapGuard final {
+        MapGuard(Buffer& buffer, void* ptr): buffer_(buffer), ptr(ptr) { }
+        ~MapGuard() {
+            Unmap();
+        }
+        void Unmap() {
+            if (!unmapped_) {
+                buffer_.Bind();
+                GL_CALL(glUnmapBuffer(BufferType2GL(buffer_.type_)));
+                unmapped_ = true;
+            }
+        }
+
+        MapGuard(const MapGuard&) = delete;
+        MapGuard& operator=(const MapGuard&) = delete;
+
+        void* ptr;
+
+    private:
+        bool unmapped_ = false;
+        Buffer& buffer_;
+    };
+
+    Buffer(BufferType type): type_(type) {
         GL_CALL(glGenBuffers(1, &id_));
     }
+
+    Buffer(const Buffer&) = delete;
+    Buffer& operator=(const Buffer&) = delete;
+
     ~Buffer() {
         GL_CALL(glDeleteBuffers(1, &id_));
     }
 
     void SetData(void* datas, size_t size) {
         Bind();
-        GL_CALL(glBufferData(type2gl(type_), size, datas, GL_STATIC_DRAW));
+        GL_CALL(glBufferData(BufferType2GL(type_), size, datas, GL_STATIC_DRAW));
     }
 
-    void Bind() {
-        glBindBuffer(type2gl(type_), id_);
+    void GetData(void* buf) const {
+        Bind();
+        size_t size = Size();
+        GL_CALL(glGetBufferSubData(BufferType2GL(type_), 0, size, buf));
     }
 
-    void Unbind() {
-        glBindBuffer(type2gl(type_), 0);
+    void GetSubData(void* buf, size_t offset, size_t len) const {
+        Bind();
+        GL_CALL(glGetBufferSubData(BufferType2GL(type_), offset, len, buf));
+    }
+
+    void ExtendSize(size_t size) {
+        SetData(nullptr, size);
+    }
+
+    MapGuard Map(Access access) {
+        Bind();
+        return MapGuard(*this, GL_RET_CALL(glMapBuffer(BufferType2GL(type_), access2gl(access))));
+    }
+
+    MapGuard MapRange(size_t offset, size_t len, Access access) {
+        Bind();
+        return MapGuard(*this, GL_RET_CALL(glMapBufferRange(BufferType2GL(type_), offset, len, access2gl(access))));
+    }
+
+    void Flush(size_t offset, size_t len) {
+        Bind();
+        GL_CALL(glFlushMappedBufferRange(BufferType2GL(type_), offset, len));
+    }
+
+    void Bind() const {
+        GL_CALL(glBindBuffer(BufferType2GL(type_), id_));
+    }
+
+    void Unbind() const {
+        GL_CALL(glBindBuffer(BufferType2GL(type_), 0));
+    }
+
+    void Bind2Base(uint8_t slot) const {
+        if (type_ != BufferType::AtomicCounter &&
+            type_ != BufferType::TransformFeedback &&
+            type_ != BufferType::UniformBuffer &&
+            type_ != BufferType::ShaderStorage) {
+            LOGW("the buffer type don't support bind to base");
+        } else {
+            GL_CALL(glBindBufferBase(BufferType2GL(type_), slot, id_));
+        }
+    }
+
+    int Size() const {
+        GLint size = 0;
+        Bind();
+        GL_CALL(glGetBufferParameteriv(BufferType2GL(type_), GL_BUFFER_SIZE, &size));
+        return size;
     }
 
 private:
     GLuint id_;
-    Type type_;
+    BufferType type_;
 
-    GLenum type2gl(Buffer::Type type) {
-        switch (type) {
-            case Buffer::Type::Array: return GL_ARRAY_BUFFER;
-            case Buffer::Type::Element: return GL_ELEMENT_ARRAY_BUFFER;
+    GLenum access2gl(Access access) const {
+        switch (access) {
+            case Access::ReadOnly: return GL_READ_ONLY;
+            case Access::WriteOnly: return GL_WRITE_ONLY;
+            case Access::ReadWrite: return GL_READ_WRITE;
+            case Access::InvalidBuffer: return GL_MAP_INVALIDATE_BUFFER_BIT;
+            case Access::InvalidRange: return GL_MAP_INVALIDATE_RANGE_BIT;
+            case Access::FlushExplicit: return GL_MAP_FLUSH_EXPLICIT_BIT;
         }
     }
 
-    std::string_view type2str(Buffer::Type type) {
-        switch (type) {
-            case Buffer::Type::Array: return "Array";
-            case Buffer::Type::Element: return "Element";
-        }
-        return "Unknown";
-    }
+    
 };
 
 /************ texture *****************/
@@ -236,6 +505,28 @@ struct Sampler final {
         std::optional<TextureFilerType> min, mag;
     } filter;
     bool mipmap;
+
+    static Sampler CreateLinearRepeat() {
+        Sampler sampler;
+        sampler.mipmap = false;
+        sampler.filter.mag = TextureFilerType::Linear;
+        sampler.filter.min = TextureFilerType::Linear;
+        sampler.wrapper.s = TextureWrapperType::Repeat;
+        sampler.wrapper.r = TextureWrapperType::Repeat;
+        sampler.wrapper.t = TextureWrapperType::Repeat;
+        return sampler;
+    }
+
+    static Sampler CreateNearestRepeat() {
+        Sampler sampler;
+        sampler.mipmap = false;
+        sampler.filter.mag = TextureFilerType::Nearest;
+        sampler.filter.min = TextureFilerType::Nearest;
+        sampler.wrapper.s = TextureWrapperType::Repeat;
+        sampler.wrapper.r = TextureWrapperType::Repeat;
+        sampler.wrapper.t = TextureWrapperType::Repeat;
+        return sampler;
+    }
 };
 
 enum class Format {
@@ -306,6 +597,9 @@ public:
         GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
     }
 
+    Texture(const Texture&) = delete;
+    Texture& operator=(const Texture&) = delete;
+
     ~Texture() {
         GL_CALL(glDeleteTextures(1, &id_));
     }
@@ -332,14 +626,29 @@ struct Attribute final {
     Attribute(Type type, int location) : type(type), location(location), offset(0) {}
 };
 
-inline size_t GetAttributeTypeSize(Attribute::Type type) {
+
+inline uint8_t GetAttributeTypeCount(Attribute::Type type) {
     switch (type) {
-        case Attribute::Type::Vec2: return 2 * 4;
-        case Attribute::Type::Vec3: return 3 * 4;
-        case Attribute::Type::Vec4: return 4 * 4;
-        case Attribute::Type::Mat2: return 4 * 2 * 2;
-        case Attribute::Type::Mat3: return 4 * 3 * 3;
-        case Attribute::Type::Mat4: return 4 * 4 * 4;
+        case Attribute::Type::Vec2: return 2;
+        case Attribute::Type::Vec3: return 3;
+        case Attribute::Type::Vec4: return 4;
+        case Attribute::Type::Mat2: return 2 * 2;
+        case Attribute::Type::Mat3: return 3 * 3;
+        case Attribute::Type::Mat4: return 4 * 4;
+    }
+    LOGW("[Attribute Type]: Unknown attribute type");
+    return 0;
+}
+
+inline uint8_t GetAttributeTypeSize(Attribute::Type type) {
+    uint8_t typeCount = GetAttributeTypeCount(type);
+    switch (type) {
+        case Attribute::Type::Vec2: return typeCount * 4;
+        case Attribute::Type::Vec3: return typeCount * 4;
+        case Attribute::Type::Vec4: return typeCount * 4;
+        case Attribute::Type::Mat2: return 4 * typeCount;
+        case Attribute::Type::Mat3: return 4 * typeCount;
+        case Attribute::Type::Mat4: return 4 * typeCount;
     }
     LOGW("[Attribute Type]: Unknown attribute type");
     return 0;
@@ -357,7 +666,7 @@ public:
             offset += size;
         }
 
-        return BufferLayout(std::move(attrs));
+        return BufferLayout(std::move(attrs), offset);
     }
 
     static auto CreateFromUnoffsetAttrs(const std::initializer_list<Attribute>& attrs) {
@@ -370,18 +679,90 @@ public:
             offset += size;
         }
 
-        return BufferLayout(std::move(attrs));
+        return BufferLayout(std::move(attrs), offset);
     }
 
     static auto CreateFromAttrs(const std::initializer_list<Attribute>& attrs) {
-        return BufferLayout(attrs);
+        size_t stride = 0;
+        for (auto& attr : attrs) {
+            stride += GetAttributeTypeSize(attr.type);
+        }
+        return BufferLayout(attrs, stride);
     }
 
-    BufferLayout(std::vector<Attribute>&& attrs): attributes_(std::move(attrs)) {}
-    BufferLayout(const std::vector<Attribute>& attrs): attributes_(attrs) {}
+    BufferLayout(std::vector<Attribute>&& attrs, size_t stride): attributes_(std::move(attrs)), stride_(stride) {}
+    BufferLayout(const std::vector<Attribute>& attrs, size_t stride): attributes_(attrs), stride_(stride) {}
+
+    auto& Attributes() const { return attributes_; }
+    auto Stride() const { return stride_; }
 
 private:
     std::vector<Attribute> attributes_;
+    size_t stride_ = 0;
+};
+
+class AttributePointer final {
+public:
+    AttributePointer(const BufferLayout& layout): layout_(layout) {
+        GL_CALL(glGenVertexArrays(1, &id_));
+        bindAttributes(layout_);
+    }
+
+    AttributePointer(BufferLayout&& layout): layout_(std::move(layout)) {
+        GL_CALL(glGenVertexArrays(1, &id_));
+        bindAttributes(layout_);
+    }
+
+    AttributePointer(const AttributePointer&) = delete;
+    AttributePointer& operator=(const AttributePointer&) = delete;
+
+    ~AttributePointer() {
+        GL_CALL(glDeleteVertexArrays(1, &id_));
+    }
+
+    void Bind() const {
+        GL_CALL(glBindVertexArray(id_));
+    }
+
+    void Unbind() const {
+        GL_CALL(glBindVertexArray(0));
+    }
+
+private:
+    BufferLayout layout_;
+    GLuint id_;
+
+    void bindAttributes(const BufferLayout& layout) {
+        Bind();
+        for (auto& attr : layout.Attributes()) {
+            GL_CALL(glVertexAttribPointer(attr.location,
+                                          GetAttributeTypeCount(attr.type),
+                                          GL_FLOAT,
+                                          GL_FALSE,
+                                          layout.Stride(),
+                                          (void*)attr.offset));
+            GL_CALL(glEnableVertexAttribArray(attr.location));
+        }
+    }
+
+};
+
+/************ physic device *****************/
+class PhysicDevice final {
+public:
+    std::array<int, 3> GetComputeWorkGroupMaxSize() const {
+        std::array<int, 3> work_grp_cnt;
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &work_grp_cnt[0]);
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &work_grp_cnt[1]);
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &work_grp_cnt[2]);
+        return work_grp_cnt;
+    }
+
+    int GetComputeGroupInvocationMaxCount() const {
+        int work_grp_inv;
+        GL_CALL(glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &work_grp_inv));
+        return work_grp_inv;
+    }
 };
 
 /************ abstract resource manager *****************/
@@ -398,7 +779,7 @@ public:
         if (!result.second) {
             LOGE("[ResManager]: emplace %s failed! Maybe C++ inner error", name.c_str());
         }
-        return *result.first;
+        return result.first->second;
     }
 
     void Destory(const std::string& name) {
@@ -421,3 +802,4 @@ private:
 class ShaderManager: public ResManager<Shader> {};
 class BufferManager: public ResManager<Buffer> {};
 class TextureManager: public ResManager<Texture> {};
+class AttrPointerManager: public ResManager<AttributePointer> {};

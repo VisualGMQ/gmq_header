@@ -19,4 +19,4 @@ cmake --build build
 |ecs.hpp|an ECS framework referenced bevy's ECS|sparse_sets.hpp|
 |sparse_sets.hpp|a sparse_set data-structure implement, [reference](https://manenko.com/2021/05/23/sparse-sets.html)|None|
 |net.hpp|a thin layer for Win32 Socket|None|
-|gogl.hpp|a thin layer for OpenGL 4.5|log.hpp & cgmath.hpp & Any opengl loader(glew, glad). Test dependents on glad and glfw|
+|gogl.hpp|a thin layer for OpenGL 4.3|log.hpp & cgmath.hpp & any opengl loader(glew, glad). Test dependents on glad and glfw(in `3rdlibs/`)|
