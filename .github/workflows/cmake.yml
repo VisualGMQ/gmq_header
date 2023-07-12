@@ -20,6 +20,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Pull submodules recursively
+      run: git submodule update --init --recursive
+
     - name: Configure CMake
       run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/cmake-build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
