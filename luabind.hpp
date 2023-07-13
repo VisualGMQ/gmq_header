@@ -1,4 +1,5 @@
 #pragma once
+#define SOL_ALL_SAFETIES_ON 1
 #include "sol/sol.hpp"
 #include "refl.hpp"
 
@@ -85,23 +86,65 @@ void _bindFields(sol::usertype<typename ClassInfo::classType>& usertype) {
 }
 
 template <typename T, typename... Funcs>
-void _bindOverloadFuncs(sol::usertype<T>& usertype, const refl::OverloadFuncs<Funcs...>& overload) {
-    usertype[overload.name] = sol::overload(std::get<Funcs>(overload.funcs)...);
+void _bindOverloadFuncs(sol::usertype<T>& usertype, const refl::OverloadFuncs<Funcs...>& overload, std::string_view name) {
+    usertype[name] = sol::overload(std::get<Funcs>(overload.funcs)...);
+}
+
+// @brief a helper function to convert C++ operator overload to lua method
+inline std::optional<std::string_view> _getOperatorLuaName(std::string_view name, bool hasParams) {
+    if (name == "operator+") {
+        return "__add";
+    }
+    if (name == "operator-" && hasParams) {
+        return "__sub";
+    }
+    if (name == "operator-" && !hasParams) {
+        return "__unm";
+    }
+    if (name == "operator*") {
+        return "__mul";
+    }
+    if (name == "operator/") {
+        return "__div";
+    }
+    if (name == "operator<") {
+        return "__lt";
+    }
+    if (name == "operator==") {
+        return "__eq";
+    }
+    if (name == "operator()") {
+        return "__call";
+    }
+    return std::nullopt;
 }
 
 template <typename T, size_t Idx, typename... Fields>
 void _bindOneField(sol::usertype<T>& usertype, const std::tuple<Fields...>& fields) {
     auto field = std::get<Idx>(fields);
-    using high_attr = _GetHighLevelAttr<decltype(field)::attrs>;
+    using type = std::tuple_element_t<Idx, std::tuple<Fields...>>;
+    using high_attr = _GetHighLevelAttr<type::attrs>;
     constexpr auto attr = high_attr::value;
     if constexpr (attr != _AttrType::NoBind) {
-        if constexpr (refl::IsOverloadFunctions<std::remove_const_t<decltype(field)>>::value) {
-            _bindOverloadFuncs<T>(usertype, field);
+        // detect convertable name
+        std::string_view name = field.name;
+        if constexpr (!refl::IsOverloadFunctions<type>::value) {
+            if constexpr (std::is_member_function_pointer_v<typename type::pointerType>) {
+                using params = typename type::params;
+                auto operatorName = _getOperatorLuaName(name, std::tuple_size_v<params> != 0);
+                if (operatorName.has_value()) {
+                    name = operatorName.value();
+                }
+            }
+        }
+
+        if constexpr (refl::IsOverloadFunctions<type>::value) {
+            _bindOverloadFuncs<T>(usertype, field, name);
         } else {
             if constexpr (attr == _AttrType::ChangeName) {
                 usertype[high_attr::type::name] = field.pointer;
             } else {
-                usertype[field.name] = field.pointer;
+                usertype[name] = field.pointer;
             }
         }
     }

@@ -21,6 +21,11 @@ struct TestClass final {
         std::cout << "my real name is ChangeNameFunc" << std::endl;
     }
 
+    TestClass operator+(float value) const {
+        std::cout << "plused " << value << std::endl;
+        return *this;
+    }
+
     int value;
 };
 
@@ -29,6 +34,7 @@ ReflClass(TestClass) {
     Fields(
         Field("value", &TestClass::value),
         Field("GetValue", &TestClass::GetValue),
+        Field("operator+", &TestClass::operator+),
         Overload("PrintType",
                     static_cast<void(TestClass::*)(const std::string&) const>(&TestClass::PrintType),
                     static_cast<void(TestClass::*)(float) const>(&TestClass::PrintType)),
@@ -41,18 +47,29 @@ int main() {
     sol::state lua;
     lua.open_libraries(sol::lib::base);
     luabind::BindClass<TestClass>(lua, "TestClass");
-    lua.do_string(R"(
-        local a = TestClass.new(123)
-        print(a:GetValue())
-        print(a.value)
-        a:PrintType("haha")
-        a:PrintType(123)
-        if a.InvalidFunction then
-            a:InvalidFunction()
-        end
-        if a.foo then
-            a:foo()
+    lua.script(R"(
+        function Test()
+            local a = TestClass.new(123)
+            print(a:GetValue())
+            print(a.value)
+            a = a + 5.0
+            a:PrintType("haha")
+            a:PrintType(123)
+            if a.InvalidFunction then
+                a:InvalidFunction()
+            end
+            if a.foo then
+                a:foo()
+            end
         end
     )");
+
+	sol::protected_function f(lua["Test"]);
+    sol::protected_function_result result = f();
+	if (!result.valid()) {
+		sol::error err = result;
+		std::string what = err.what();
+		std::cout << "call failed, sol::error::what() is:" << std::endl << what << std::endl;
+	}
     return 0;
 }

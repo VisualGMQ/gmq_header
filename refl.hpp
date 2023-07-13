@@ -24,8 +24,11 @@ struct TypeInfoBase {
 //! @tparam Ret return type
 //! @tparam Class if function is class member function, give the class type, or give void
 //! @tparam ...Params function parameters
+template <typename F>
+struct FuncInfoBase;
+
 template <typename Ret, typename Class, typename... Params>
-struct FuncInfoBase {
+struct FuncInfoBase<Ret(Class::*)(Params...)> {
     static constexpr bool isStatic = false;
     using returnType = Ret;
     using params = std::tuple<Params...>;
@@ -37,9 +40,23 @@ struct FuncInfoBase {
     const pointerType pointer;
 };
 
+template <typename Ret, typename Class, typename... Params>
+struct FuncInfoBase<Ret(Class::*)(Params...)const> {
+    static constexpr bool isStatic = false;
+    using returnType = Ret;
+    using params = std::tuple<Params...>;
+    using classType = Class;
+    using pointerType = Ret(Class::*)(Params...)const;
+
+    explicit constexpr FuncInfoBase(pointerType ptr): pointer(ptr) {}
+
+    const pointerType pointer;
+};
+
+
 // specialization for non-member function 
 template <typename Ret, typename... Params>
-struct FuncInfoBase<Ret, void, Params...> {
+struct FuncInfoBase<Ret(Params...)> {
     static constexpr bool isStatic = true;
     using returnType = Ret;
     using params = std::tuple<Params...>;
@@ -51,16 +68,17 @@ struct FuncInfoBase<Ret, void, Params...> {
     const pointerType pointer;
 };
 
-template <typename Ret, typename Class, typename... Params>
-struct FuncInfo: public FuncInfoBase<Ret, Class, Params...> {
+template <typename F>
+struct FuncInfo: public FuncInfoBase<F> {
     static constexpr bool hasOverload = false;
 
     constexpr FuncInfo(std::string_view name,
-                       typename FuncInfoBase<Ret, Class, Params...>::pointerType ptr)
-        : FuncInfoBase<Ret, Class, Params...>(ptr), name(name) {}
+                       typename FuncInfoBase<F>::pointerType ptr)
+        : FuncInfoBase<F>(ptr), name(name) {}
 
     std::string_view name;
 };
+
 
 //! @brief a help function to check all function types are static functions
 template <typename T, typename... Remains>
@@ -119,43 +137,46 @@ struct VariableInfo<Type, void> {
     std::string_view name;
 };
 
-
 //! @brief field information(member/non-member function, variable)
 //! @tparam Attr some custom attribute binding on this field
 //! @tparam T 
 template <typename AttrList, typename T>
 struct FieldInfo: public VariableInfo<T, void> {
     using attrs = AttrList;
-    using pointerType = T*;
 
-    explicit constexpr FieldInfo(std::string_view name, pointerType ptr): VariableInfo<T, void>(name, ptr) { }
+    explicit constexpr FieldInfo(std::string_view name, typename VariableInfo<T, void>::pointerType ptr): VariableInfo<T, void>(name, ptr) { }
 };
 
 // specialize for member variable
 template <typename AttrList, typename Type, typename Class>
 struct FieldInfo<AttrList, Type(Class::*)>: public VariableInfo<Type, Class> {
     using attrs = AttrList;
-    using pointerType = Type Class::*;
 
-    constexpr FieldInfo(std::string_view name, pointerType ptr): VariableInfo<Type, Class>(name, ptr) { }
+    constexpr FieldInfo(std::string_view name, typename VariableInfo<Type, Class>::pointerType ptr): VariableInfo<Type, Class>(name, ptr) { }
 };
 
 // specialize for non-member function
 template <typename AttrList, typename Ret, typename... Params>
-struct FieldInfo<AttrList, Ret(Params...)>: public FuncInfo<Ret, void, Params...> {
+struct FieldInfo<AttrList, Ret(Params...)>: public FuncInfo<Ret(Params...)> {
     using attrs = AttrList;
-    using pointerType = Ret(*)(Params...);
 
-    explicit constexpr FieldInfo(std::string_view name, pointerType ptr): FuncInfo<Ret, void, Params...>(name, ptr) { }
+    explicit constexpr FieldInfo(std::string_view name, typename FuncInfo<Ret(Params...)>::pointerType ptr): FuncInfo<Ret(Params...)>(name, ptr) { }
 };
 
 // specialize for member function
 template <typename AttrList, typename Ret, typename Class, typename... Params>
-struct FieldInfo<AttrList, Ret(Class::*)(Params...)>: public FuncInfo<Ret, Class, Params...> {
+struct FieldInfo<AttrList, Ret(Class::*)(Params...)>: public FuncInfo<Ret(Class::*)(Params...)> {
     using attrs = AttrList;
-    using pointerType = Ret(Class::*)(Params...);
 
-    explicit constexpr FieldInfo(std::string_view name, pointerType ptr): FuncInfo<Ret, Class, Params...>(name, ptr) { }
+    explicit constexpr FieldInfo(std::string_view name, typename FuncInfo<Ret(Class::*)(Params...)>::pointerType ptr): FuncInfo<Ret(Class::*)(Params...)>(name, ptr) { }
+};
+
+// specialize for member function
+template <typename AttrList, typename Ret, typename Class, typename... Params>
+struct FieldInfo<AttrList, Ret(Class::*)(Params...)const>: public FuncInfo<Ret(Class::*)(Params...)const> {
+    using attrs = AttrList;
+
+    explicit constexpr FieldInfo(std::string_view name, typename FuncInfo<Ret(Class::*)(Params...)const>::pointerType ptr): FuncInfo<Ret(Class::*)(Params...)const>(name, ptr) { }
 };
 
 template <typename T>
