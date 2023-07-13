@@ -21,6 +21,8 @@ AddExample(ecs)
 AddExample(sparse_sets)
 AddTest(fp)
 AddTest(refl)
+AddTest(luabind)
+target_link_libraries(luabind PRIVATE sol2 lua)
 
 if (WIN32)
     AddExample(net_echo_client)

@@ -17,6 +17,7 @@ struct TestClass final {
     TestClass(double) {}
 };
 
+
 ReflClass(TestClass) {
     Constructors(TestClass(float), TestClass(double))
     Fields(
@@ -24,8 +25,9 @@ ReflClass(TestClass) {
         Field("dvalue", &TestClass::dvalue),
         Field("StaticFunc", TestClass::StaticFunc),
         Field("MemberFunc", &TestClass::MemberFunc),
-        Field("OverloadFunc", static_cast<void(TestClass::*)(int)>(&TestClass::OverloadFunc)),
-        Field("OverloadFunc", static_cast<void(TestClass::*)(double)>(&TestClass::OverloadFunc)),
+        Overload("OverloadFunc",
+                    static_cast<void(TestClass::*)(int)>(&TestClass::OverloadFunc),
+                    static_cast<void(TestClass::*)(double)>(&TestClass::OverloadFunc)),
     )
 };
 
@@ -69,7 +71,9 @@ TEST_CASE("reflection") {
         static_assert(std::is_same_v<type::returnType, std::string>);
         static_assert(std::is_same_v<type::params, std::tuple<double&, char&&>>);
         static_assert(member.pointer == &TestClass::MemberFunc);
-        static_assert(!refl::HasOverloadFunction<TestClass>("MemberFunc"));
-        static_assert(refl::HasOverloadFunction<TestClass>("OverloadFunc"));
+        static_assert(!refl::IsOverloadFunctions<std::remove_const_t<decltype(member)>>::value);
+
+        constexpr auto overload = std::get<4>(info.fields);
+        static_assert(refl::IsOverloadFunctions<std::remove_const_t<decltype(overload)>>::value);
     }
 }
