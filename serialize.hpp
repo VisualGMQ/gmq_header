@@ -1,0 +1,127 @@
+
+#include "refl.hpp"
+#define SOL_ALL_SAFETIES_ON 1
+#include "sol/sol.hpp"
+#include "log.hpp"
+
+namespace serialize {
+
+struct DeserialPath {
+    std::vector<std::string> path;
+
+    std::string ToString() const {
+        std::string str;
+        for (const auto& p : path) {
+            str += "->" + p;
+        }
+        return str;
+    }
+};
+
+template <typename T>
+std::vector<uint8_t> SerializeToLua() {
+    // TODO: not finish
+    return {};
+}
+
+template <typename T>
+std::optional<T> DeserializeFromLua(sol::object& lua) {
+    DeserialPath path;
+    return _deserializeFromLua<T>(lua, path);
+}
+
+template <typename T>
+std::optional<T> _deserializeFromLua(sol::object& lua, DeserialPath& path) {
+    if constexpr (std::is_class_v<T> && !_isSerialDirectly<T>()) {
+        using typeinfo = refl::TypeInfo<T>;
+        if (lua.get_type() == sol::type::table) {
+            T value;
+            _deserializeField<0>(value, lua.as<sol::table>(), typeinfo::fields, path);
+            return value;
+        } else {
+            LOGW("[Lua Config Parser]: try to parse a non-table lua node to a class. Path: ", path.ToString());
+            return std::nullopt;
+        }
+    } else {
+        if constexpr (_isVector<T>::value) {
+            using inner_type = _isVector<T>::value_type;
+            std::vector<inner_type> values;
+            sol::table table = lua.as<sol::table>();
+            for (auto& elem : table) {
+                auto elem_value = _deserializeFromLua<inner_type>(elem.second, path);
+                if (elem_value.has_value()) {
+                    values.push_back(elem_value.value());
+                } else {
+                    LOGW("[Lua Config Parser]: parse std::vector<T> failed. Path: ", path.ToString());
+                    return std::nullopt;
+                }
+            }
+            return values;
+        } else {
+            return lua.as<T>();
+        }
+    }
+}
+
+inline bool _canSerialDirectly(const sol::object& lua) {
+    auto type = lua.get_type();
+    return type == sol::type::boolean ||
+           type == sol::type::number ||
+           type == sol::type::string ||
+           type == sol::type::function ||
+           type == sol::type::nil ||
+           type == sol::type::lua_nil;
+}
+
+template <typename T>
+struct _isVector {
+    static constexpr bool value = false;
+};
+
+template <typename T>
+struct _isVector<std::vector<T>> {
+    static constexpr bool value = true;
+    using value_type = T;
+};
+
+template <typename T>
+constexpr bool _isSerialDirectly() {
+    return std::is_arithmetic_v<T> ||
+           std::is_same_v<T, std::string> ||
+           _isVector<T>::value;
+}
+
+template <size_t Idx, typename T, typename... Types>
+void _deserializeField(T& value, sol::table& lua, std::tuple<Types...> fields, DeserialPath& path) {
+    auto field = std::get<Idx>(fields);
+    using field_info = std::tuple_element_t<Idx, std::tuple<Types...>>;
+    path.path.push_back(std::string(field.name.data()));
+    auto lua_field = lua[field.name];
+    if (lua_field.valid()) {
+        if constexpr (_isSerialDirectly<field_info::type>()) {
+            auto field_value = _deserializeFromLua<field_info::type>(lua_field.get<sol::object>(), path);
+            if (field_value) {
+                value.*field.pointer = field_value.value();
+            } else {
+                LOGW("[Lua Config Parser]: parsing failed, no exists field. Path: ", path.ToString());
+                return;
+            }
+        } else {
+            if (lua_field.get_type() == sol::type::table) {
+                auto field_value = _deserializeFromLua<field_info::type>(lua_field.get<sol::table>(), path);
+                if (field_value) {
+                    value.*field.pointer = field_value.value();
+                } else {
+                    LOGW("[Lua Config Parser]: parsing failed, no exists field. Path: ", path.ToString());
+                    return;
+                }
+            }
+        }
+    }
+
+    if constexpr (Idx < sizeof...(Types) - 1) {
+        _deserializeField<Idx + 1>(value, lua, fields, path);
+    }
+}
+
+}
