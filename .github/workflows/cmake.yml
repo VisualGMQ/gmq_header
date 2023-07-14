@@ -23,6 +23,9 @@ jobs:
     - name: Upate Apt
       run: sudo apt update
 
+    - name: Upgrade Apt
+      run: sudo apt upgrade
+
     - name: Install CMake
       run: sudo apt install cmake git
     
