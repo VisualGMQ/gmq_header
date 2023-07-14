@@ -13,6 +13,7 @@ struct FamilyConfig {
     PersonConfig mother, father;
     std::vector<PersonConfig> children;
     std::string name;
+    std::array<int, 4> ids;
 };
 
 ReflClass(PersonConfig) {
@@ -31,6 +32,7 @@ ReflClass(FamilyConfig) {
         Field("father", &FamilyConfig::father),
         Field("children", &FamilyConfig::children),
         Field("name", &FamilyConfig::name),
+        Field("ids", &FamilyConfig::ids),
     )
 };
 
@@ -81,6 +83,7 @@ TEST_CASE("deserialize", "[serialize]") {
                 },
             },
             name = "happy family",
+            ids = { 1, 2, 3, 4 },
         }
         )");
         sol::table table = lua["Config"];
@@ -105,5 +108,9 @@ TEST_CASE("deserialize", "[serialize]") {
         REQUIRE(family->children[1].female == true);
 
         REQUIRE(family->name == "happy family");
+        REQUIRE(family->ids[0] == 1);
+        REQUIRE(family->ids[1] == 2);
+        REQUIRE(family->ids[2] == 3);
+        REQUIRE(family->ids[3] == 4);
     }
 }

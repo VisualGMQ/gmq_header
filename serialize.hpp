@@ -18,12 +18,19 @@ struct DeserialPath {
     }
 };
 
+//! @brief serialize class to lua
+//! @tparam T  the class you want to serialize
+//! @return the serialized lua code, please write then into lua file
 template <typename T>
 std::vector<uint8_t> SerializeToLua() {
     // TODO: not finish
     return {};
 }
 
+//! @brief descrialize class from lua file
+//! @tparam T  the class you want to deserialize
+//! @param lua 
+//! @return the class instance, failed will return std::nullopt
 template <typename T>
 std::optional<T> DeserializeFromLua(sol::object& lua) {
     DeserialPath path;
@@ -57,6 +64,27 @@ std::optional<T> _deserializeFromLua(sol::object& lua, DeserialPath& path) {
                 }
             }
             return values;
+        } else if constexpr (_isArray<T>::value) {
+            using inner_type = _isArray<T>::value_type;
+            constexpr size_t require_size = _isArray<T>::size;
+            sol::table table = lua.as<sol::table>();
+            if (table.size() <require_size) {
+                LOGW("[Lua Config Parser]: parse std::array failed, require ", require_size, " elements but has ", table.size(), ". Path: ", path.ToString());
+                return std::nullopt;
+            } else {
+                std::array<inner_type, require_size> datas;
+                int i = 0;
+                for (auto& elem : table) {
+                    auto elem_value = _deserializeFromLua<inner_type>(elem.second, path);
+                    if (elem_value.has_value()) {
+                        datas[i++] = elem_value.value();
+                    } else {
+                        LOGW("[Lua Config Parser]: parse std::array element failed. Path: ", path.ToString());
+                        return std::nullopt;
+                    }
+                }
+                return datas;
+            }
         } else {
             return lua.as<T>();
         }
@@ -85,10 +113,24 @@ struct _isVector<std::vector<T>> {
 };
 
 template <typename T>
+struct _isArray {
+    static constexpr bool value = false;
+};
+
+template <typename T, size_t N>
+struct _isArray<std::array<T, N>> {
+    static constexpr bool value = true;
+    using value_type = T;
+    static constexpr size_t size = N;
+};
+
+
+template <typename T>
 constexpr bool _isSerialDirectly() {
     return std::is_arithmetic_v<T> ||
            std::is_same_v<T, std::string> ||
-           _isVector<T>::value;
+           _isVector<T>::value ||
+           _isArray<T>::value;
 }
 
 template <size_t Idx, typename T, typename... Types>
