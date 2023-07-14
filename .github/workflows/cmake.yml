@@ -20,11 +20,17 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Pull submodules recursively
-      run: git submodule update --init --recursive
+    - name: Upate Apt
+      run: sudo apt update
+
+    - name: Install CMake
+      run: sudo apt install cmake git
     
     - name: Depedency Install
       run: sudo apt install xorg-dev
+
+    - name: Pull submodules recursively
+      run: git submodule update --init --recursive
 
     - name: Configure CMake
       run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/cmake-build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
