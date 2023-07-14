@@ -6,15 +6,15 @@ int main() {
 
     // create your own logger and log
     auto& log = logger::LoggerMgr::Instance().GetDefault();
-    log.i("info");
-    log.t("trace");
+    LOGI("info");
+    LOGI("trace");
 
     log.SetLevel(logger::Debug);
     // this will not output
-    log.i("info after set level to debug");
+    LOGI("info after set level to debug");
     // this will output
-    log.d("debug after set level to debug");
-    log.w("warning after set level to debug");
+    LOGD("debug after set level to debug");
+    LOGW("warning after set level to debug");
 
     return 0;
 }
