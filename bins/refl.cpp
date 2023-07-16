@@ -31,6 +31,11 @@ ReflClass(TestClass) {
     )
 };
 
+template <typename T>
+struct FiltFloat {
+    static constexpr bool value = std::is_floating_point_v<T>;
+};
+
 TEST_CASE("reflection") {
     constexpr auto info = refl::TypeInfo<TestClass>();
     static_assert(std::is_same_v<decltype(info)::classType, TestClass>);
@@ -59,7 +64,7 @@ TEST_CASE("reflection") {
         static_assert(member.isStatic == true);
         static_assert(member.name == "StaticFunc");
         static_assert(std::is_same_v<type::returnType, int>);
-        static_assert(std::is_same_v<type::params, std::tuple<float, double>>);
+        static_assert(std::is_same_v<type::params, refl::ElemList<float, double>>);
         static_assert(member.pointer == &TestClass::StaticFunc);
     }
 
@@ -69,11 +74,15 @@ TEST_CASE("reflection") {
         static_assert(member.isStatic == false);
         static_assert(member.name == "MemberFunc");
         static_assert(std::is_same_v<type::returnType, std::string>);
-        static_assert(std::is_same_v<type::params, std::tuple<double&, char&&>>);
+        static_assert(std::is_same_v<type::params, refl::ElemList<double&, char&&>>);
         static_assert(member.pointer == &TestClass::MemberFunc);
         static_assert(!refl::IsOverloadFunctions<std::remove_const_t<decltype(member)>>::value);
 
         constexpr auto overload = std::get<4>(info.fields);
         static_assert(refl::IsOverloadFunctions<std::remove_const_t<decltype(overload)>>::value);
     }
+
+    using Elems = refl::ElemList<double, float, int>;
+    using type = refl::Filter<FiltFloat, Elems>::type;
+    static_assert(std::is_same_v<type, refl::ElemList<double, float>>);
 }

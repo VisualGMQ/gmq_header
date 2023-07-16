@@ -1,10 +1,24 @@
 #include "refl.hpp"
 #include "luabind.hpp"
 
+struct Person {
+    Person(const std::string& name): name(name) {}
+    std::string name;
+};
+
 struct TestClass final {
     TestClass(int a): value(a) {}
+    TestClass(Person&& p): person(std::move(p)) {}
 
     int GetValue() const { return value; }
+
+    void SetValue(int v) {
+        value = std::move(v);
+    }
+
+    void SetPerson(Person&& p) {
+        person = std::move(p);
+    }
 
     void InvalidFunction() {
         std::cout << "Invalid function" << std::endl;
@@ -15,6 +29,9 @@ struct TestClass final {
     }
     void PrintType(float) const {
         std::cout << "number" << std::endl;
+    }
+    void PrintType(Person&& p) const {
+        std::cout << "person" << std::endl;
     }
 
     void ChangeNameFunc() {
@@ -27,16 +44,26 @@ struct TestClass final {
     }
 
     int value;
+
+    Person person{"no-name"};
+};
+
+ReflClass(Person) {
+    Constructors(Person(const std::string&))
+    Fields()
 };
 
 ReflClass(TestClass) {
-    Constructors(TestClass(int))
+    Constructors(TestClass(int), TestClass(Person&&))
     Fields(
         Field("value", &TestClass::value),
         Field("GetValue", &TestClass::GetValue),
+        Field("SetValue", &TestClass::SetValue),
+        Field("SetPerson", &TestClass::SetPerson),
         Field("operator+", &TestClass::operator+),
         Overload("PrintType",
                     static_cast<void(TestClass::*)(const std::string&) const>(&TestClass::PrintType),
+                    static_cast<void(TestClass::*)(Person&&) const>(&TestClass::PrintType),
                     static_cast<void(TestClass::*)(float) const>(&TestClass::PrintType)),
         AttrField(Attrs(luabind::LuaBindName<char, 'f', 'o', 'o'>), "ChangeNameFunc", &TestClass::ChangeNameFunc),
         AttrField(Attrs(luabind::LuaNoBind), "InvalidFunction", &TestClass::InvalidFunction),
@@ -53,6 +80,8 @@ int main() {
             print(a:GetValue())
             print(a.value)
             a = a + 5.0
+            a:SetValue(234)
+            print(a.value)
             a:PrintType("haha")
             a:PrintType(123)
             if a.InvalidFunction then
@@ -71,5 +100,6 @@ int main() {
 		std::string what = err.what();
 		std::cout << "call failed, sol::error::what() is:" << std::endl << what << std::endl;
 	}
+
     return 0;
 }

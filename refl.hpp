@@ -10,10 +10,53 @@
 //! @namespace refl
 namespace refl {
 
+//! @brief type container
 template <typename... Args>
 struct ElemList {
     static constexpr size_t size = sizeof...(Args);
 };
+
+// some help struct reference to functional programming 
+template <typename T>
+struct Head final { };
+
+template <typename T, typename... Args>
+struct Head<ElemList<T, Args...>> {
+    using type = T;
+};
+
+template <typename T>
+struct Tail final { };
+
+template <typename T, typename... Args>
+struct Tail<ElemList<T, Args...>> {
+    using type = ElemList<Args...>;
+};
+
+template <typename Elem, typename ElemList>
+struct Concat;
+
+template <typename Elem, typename... Elems>
+struct Concat<Elem, ElemList<Elems...>> {
+    using type = ElemList<Elem, Elems...>;
+};
+
+template <template <typename> class Pred, typename ElemList>
+struct Filter;
+
+template <template<typename> class Pred, typename T, typename... Args>
+struct Filter<Pred, ElemList<T, Args...>> {
+    using type = std::conditional_t<Pred<T>::value,
+                    typename Concat<T, typename Filter<Pred, ElemList<Args...>>::type>::type,
+                    typename Filter<Pred, ElemList<Args...>>::type
+                >;
+};
+
+template <template <typename> class Pred>
+struct Filter<Pred, ElemList<>> {
+    using type = ElemList<>;
+};
+
 
 template <typename T>
 struct TypeInfoBase {
@@ -31,7 +74,7 @@ template <typename Ret, typename Class, typename... Params>
 struct FuncInfoBase<Ret(Class::*)(Params...)> {
     static constexpr bool isStatic = false;
     using returnType = Ret;
-    using params = std::tuple<Params...>;
+    using params = ElemList<Params...>;
     using classType = Class;
     using pointerType = Ret(Class::*)(Params...);
 
@@ -44,7 +87,7 @@ template <typename Ret, typename Class, typename... Params>
 struct FuncInfoBase<Ret(Class::*)(Params...)const> {
     static constexpr bool isStatic = false;
     using returnType = Ret;
-    using params = std::tuple<Params...>;
+    using params = ElemList<Params...>;
     using classType = Class;
     using pointerType = Ret(Class::*)(Params...)const;
 
@@ -59,7 +102,7 @@ template <typename Ret, typename... Params>
 struct FuncInfoBase<Ret(Params...)> {
     static constexpr bool isStatic = true;
     using returnType = Ret;
-    using params = std::tuple<Params...>;
+    using params = ElemList<Params...>;
     using classType = void;
     using pointerType = Ret(*)(Params...);
 
