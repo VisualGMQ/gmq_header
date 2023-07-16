@@ -229,10 +229,10 @@ struct TypeInfo;
 
 #define ReflClass(clazz) \
 template <> \
-struct refl::TypeInfo<clazz>: public TypeInfoBase<clazz>
+struct refl::TypeInfo<clazz>: public refl::TypeInfoBase<clazz>
 
 #define Fields(...) static constexpr auto fields = std::tuple{ __VA_ARGS__ };
-#define Constructors(...) using constructors = ElemList<__VA_ARGS__>;
+#define Constructors(...) using constructors = refl::ElemList<__VA_ARGS__>;
 
 #define Attrs(...) refl::AttrList<__VA_ARGS__>
 #define Field(name, type) refl::FieldInfo<Attrs(void), decltype(type)>(name, type)

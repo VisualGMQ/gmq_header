@@ -16,6 +16,10 @@ struct FamilyConfig {
     std::array<int, 4> ids;
 };
 
+struct IDNameMap{
+    std::unordered_map<int, std::string> data;
+};
+
 ReflClass(PersonConfig) {
     Constructors()
     Fields(
@@ -33,6 +37,13 @@ ReflClass(FamilyConfig) {
         Field("children", &FamilyConfig::children),
         Field("name", &FamilyConfig::name),
         Field("ids", &FamilyConfig::ids),
+    )
+};
+
+ReflClass(IDNameMap) {
+    Constructors()
+    Fields(
+        Field("data", &IDNameMap::data)
     )
 };
 
@@ -112,5 +123,23 @@ TEST_CASE("deserialize", "[serialize]") {
         REQUIRE(family->ids[1] == 2);
         REQUIRE(family->ids[2] == 3);
         REQUIRE(family->ids[3] == 4);
+    }
+
+    SECTION("deserialize unordered_map member") {
+        lua.do_string(R"(
+        Config = {
+            data = {
+                [3] = "elem3",
+                [4] = "elem4",
+                [6] = "elem6",
+            }
+        }
+        )");
+        sol::table table = lua["Config"];
+        std::optional<IDNameMap> m = serialize::DeserializeFromLua<IDNameMap>(table);
+        REQUIRE(m.has_value());
+        REQUIRE(m.value().data[3] == "elem3");
+        REQUIRE(m.value().data[4] == "elem4");
+        REQUIRE(m.value().data[6] == "elem6");
     }
 }

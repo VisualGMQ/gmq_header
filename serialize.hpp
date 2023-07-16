@@ -85,6 +85,25 @@ std::optional<T> _deserializeFromLua(sol::object& lua, DeserialPath& path) {
                 }
                 return datas;
             }
+        } else if constexpr (_isUnorderedMap<T>::value) {
+            using key = _isUnorderedMap<T>::key;
+            using type = _isUnorderedMap<T>::type;
+            std::unordered_map<key, type> result;
+            sol::table table = lua.as<sol::table>();
+            for (auto& elem : table) {
+                auto first = _deserializeFromLua<key>(elem.first, path);
+                if (!first) {
+                    LOGW("[Lua Config Parser]: parse std::unordered_map key element failed. Path: ", path.ToString());
+                    return std::nullopt;
+                }
+                auto second = _deserializeFromLua<type>(elem.second, path);
+                if (!second) {
+                    LOGW("[Lua Config Parser]: parse std::unordered_map value element failed. Path: ", path.ToString());
+                    return std::nullopt;
+                }
+                result[first.value()] = second.value();
+            }
+            return result;
         } else {
             return lua.as<T>();
         }
@@ -124,12 +143,25 @@ struct _isArray<std::array<T, N>> {
     static constexpr size_t size = N;
 };
 
+template <typename T>
+struct _isUnorderedMap {
+    static constexpr bool value = false;
+};
+
+template <typename Key, typename T, typename Hash, typename KeyEqual, typename Allocator>
+struct _isUnorderedMap<std::unordered_map<Key, T, Hash, KeyEqual, Allocator>> {
+    static constexpr bool value = true;
+    using key = Key;
+    using type = T;
+};
+
 
 template <typename T>
 constexpr bool _isSerialDirectly() {
     return std::is_arithmetic_v<T> ||
            std::is_same_v<T, std::string> ||
            _isVector<T>::value ||
+           _isUnorderedMap<T>::value ||
            _isArray<T>::value;
 }
 

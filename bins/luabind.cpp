@@ -70,10 +70,25 @@ ReflClass(TestClass) {
     )
 };
 
+
+struct Name {
+    Name(Name&&) = default;
+    void SetValue(int&& value) { this->value = value; }
+    int value;
+};
+
+ReflClass(Name) {
+    Constructors(Name(Name&&))
+    Fields(
+        Overload("SetValue", static_cast<void(Name::*)(int&&)>(&Name::SetValue))
+    )
+};
+
 int main() {
     sol::state lua;
     lua.open_libraries(sol::lib::base);
     luabind::BindClass<TestClass>(lua, "TestClass");
+    luabind::BindClass<Name>(lua, "Name");
     lua.script(R"(
         function Test()
             local a = TestClass.new(123)

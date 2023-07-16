@@ -126,12 +126,16 @@ struct _CtorBindHelper<T, refl::ElemList<Ctors...>> {
 
 template <typename ClassInfo>
 void _bindFields(sol::usertype<typename ClassInfo::classType>& usertype) {
-    _bindOneField<typename ClassInfo::classType, 0>(usertype, ClassInfo::fields);
+    if constexpr (std::tuple_size_v<decltype(ClassInfo::fields)>) {
+        _bindOneField<typename ClassInfo::classType, 0>(usertype, ClassInfo::fields);
+    }
 }
 
 template <typename T, typename... Funcs>
 void _bindOverloadFuncs(sol::usertype<T>& usertype, const std::tuple<Funcs...>& funcs, std::string_view name) {
-    usertype[name] = sol::overload(std::get<Funcs>(funcs)...);
+    if constexpr (std::tuple_size_v<std::tuple<Funcs...>> > 0) {
+        usertype[name] = sol::overload(std::get<Funcs>(funcs)...);
+    }
 }
 
 // @brief a helper function to convert C++ operator overload to lua method
