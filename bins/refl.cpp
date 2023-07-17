@@ -73,7 +73,7 @@ TEST_CASE("reflection") {
         static_assert(member.isStatic == true);
         static_assert(member.name == "StaticFunc");
         static_assert(std::is_same_v<type::returnType, int>);
-        static_assert(std::is_same_v<type::params, std::tuple<float, double>>);
+        static_assert(std::is_same_v<type::params, refl::ElemList<float, double>>);
         static_assert(member.pointer == &TestClass::StaticFunc);
     }
 
@@ -83,7 +83,7 @@ TEST_CASE("reflection") {
         static_assert(member.isStatic == false);
         static_assert(member.name == "MemberFunc");
         static_assert(std::is_same_v<type::returnType, std::string>);
-        static_assert(std::is_same_v<type::params, std::tuple<double&, char&&>>);
+        static_assert(std::is_same_v<type::params, refl::ElemList<double&, char&&>>);
         static_assert(member.pointer == &TestClass::MemberFunc);
         static_assert(!refl::IsOverloadFunctions<std::remove_const_t<decltype(member)>>::value);
 

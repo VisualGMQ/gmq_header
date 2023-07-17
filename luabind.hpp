@@ -25,7 +25,7 @@ void BindClass(sol::state& lua, std::string_view name) {
     using ClassInfo = refl::TypeInfo<T>;
     if constexpr(ClassInfo::constructors::size != 0) {
         ClassInfo classinfo;
-        usertype = std::move(_CtorBindHelper<T, typename ClassInfo::constructors>::BindAndCreate(name, lua));
+        usertype = std::move(_CtorBindHelper<T, typename refl::Filter<_HasNoRValueRefParamInFunc, ClassInfo::constructors>::type>::BindAndCreate(name, lua));
     }
     _bindFields<ClassInfo>(usertype);
 }
@@ -33,6 +33,50 @@ void BindClass(sol::state& lua, std::string_view name) {
 
 template <typename T, typename CtorList>
 struct _CtorBindHelper;
+
+//! @brief a help struct to detect whether parameters is rvalue-reference
+template <typename ParamList>
+struct _HasRValueRefParam;
+
+template <typename T, typename... Args>
+struct _HasRValueRefParam<refl::ElemList<T, Args...>> {
+    static constexpr bool value = std::is_rvalue_reference_v<T> || _HasRValueRefParam<refl::ElemList<Args...>>::value;
+};
+
+template <>
+struct _HasRValueRefParam<refl::ElemList<>> {
+    static constexpr bool value = false;
+};
+
+template <typename F>
+struct _HasNoRValueRefParamInFunc {
+    static constexpr bool value = !_HasRValueRefParam<refl::FuncInfoBase<F>::params>::value;
+};
+
+template <typename T, typename... Types>
+constexpr auto TuplePushfront(T value, std::tuple<Types...> tpl) {
+    return std::tuple_cat(std::make_tuple(value), tpl);
+}
+
+template <typename... Types>
+constexpr auto FirstOfTuple(std::tuple<Types...> t) {
+    return std::get<0>(t);
+}
+
+template <size_t idx, typename... Types>
+constexpr auto FilterNoRValueRefFunc(std::tuple<Types...> t) {
+    if constexpr (idx == sizeof...(Types)) {
+        return std::make_tuple();
+    } else {
+        if constexpr (_HasRValueRefParam<
+                          refl::FuncInfoBase<std::tuple_element_t<
+                              idx, std::tuple<Types...>>>::params>::value) {
+            return FilterNoRValueRefFunc<idx + 1>(t);
+        } else {
+            return TuplePushfront(std::get<idx>(t), FilterNoRValueRefFunc<idx + 1>(t));
+        }
+    }
+}
 
 enum _AttrType: uint8_t {
     Bind = 0,
@@ -84,12 +128,16 @@ struct _CtorBindHelper<T, refl::ElemList<Ctors...>> {
 
 template <typename ClassInfo>
 void _bindFields(sol::usertype<typename ClassInfo::classType>& usertype) {
-    _bindOneField<typename ClassInfo::classType, 0>(usertype, ClassInfo::fields);
+    if constexpr (std::tuple_size_v<decltype(ClassInfo::fields)>) {
+        _bindOneField<typename ClassInfo::classType, 0>(usertype, ClassInfo::fields);
+    }
 }
 
 template <typename T, typename... Funcs>
-void _bindOverloadFuncs(sol::usertype<T>& usertype, const refl::OverloadFuncs<Funcs...>& overload, std::string_view name) {
-    usertype[name] = sol::overload(std::get<Funcs>(overload.funcs)...);
+void _bindOverloadFuncs(sol::usertype<T>& usertype, const std::tuple<Funcs...>& funcs, std::string_view name) {
+    if constexpr (std::tuple_size_v<std::tuple<Funcs...>> > 0) {
+        usertype[name] = sol::overload(std::get<Funcs>(funcs)...);
+    }
 }
 
 // @brief a helper function to convert C++ operator overload to lua method
@@ -133,20 +181,28 @@ void _bindOneField(sol::usertype<T>& usertype, const std::tuple<Fields...>& fiel
         if constexpr (!refl::IsOverloadFunctions<type>::value) {
             if constexpr (std::is_member_function_pointer_v<typename type::pointerType>) {
                 using params = typename type::params;
-                auto operatorName = _getOperatorLuaName(name, std::tuple_size_v<params> != 0);
-                if (operatorName.has_value()) {
-                    name = operatorName.value();
+                if constexpr (!_HasRValueRefParam<params>::value) {
+                    auto operatorName = _getOperatorLuaName(name, params::size != 0);
+                    if (operatorName.has_value()) {
+                        name = operatorName.value();
+                    }
                 }
             }
         }
 
         if constexpr (refl::IsOverloadFunctions<type>::value) {
-            _bindOverloadFuncs<T>(usertype, field, name);
+            _bindOverloadFuncs<T>(usertype, FilterNoRValueRefFunc<0>(field.funcs), name);
         } else {
             if constexpr (attr == _AttrType::ChangeName) {
                 usertype[high_attr::type::name] = field.pointer;
             } else {
-                usertype[name] = field.pointer;
+                if constexpr (std::is_member_function_pointer_v<typename type::pointerType>) {
+                    if constexpr (!_HasRValueRefParam<typename type::params>::value) {
+                        usertype[name] = field.pointer;
+                    }
+                } else {
+                    usertype[name] = field.pointer;
+                }
             }
         }
     }
