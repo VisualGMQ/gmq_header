@@ -18,6 +18,12 @@ struct DeserialPath {
     }
 };
 
+//! @brief attribute for field, the field is optional
+struct SerialOption {};
+
+//! @brief attribute for field, the field will not serial/deserial
+struct NoSerial {};
+
 //! @brief serialize class to lua
 //! @tparam T  the class you want to serialize
 //! @return the serialized lua code, please write then into lua file
@@ -137,6 +143,7 @@ template <size_t Idx, typename T, typename... Types>
 void _deserializeField(T& value, sol::table& lua, std::tuple<Types...> fields, DeserialPath& path) {
     auto field = std::get<Idx>(fields);
     using field_info = std::tuple_element_t<Idx, std::tuple<Types...>>;
+
     path.path.push_back(std::string(field.name.data()));
     auto lua_field = lua[field.name];
     if (lua_field.valid()) {

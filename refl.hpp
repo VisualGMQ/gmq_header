@@ -6,6 +6,7 @@
 #include <string_view>
 #include <tuple>
 #include <unordered_map>
+#include <array>
 
 //! @namespace refl
 namespace refl {
@@ -180,7 +181,24 @@ struct FieldInfo<AttrList, Ret(Class::*)(Params...)const>: public FuncInfo<Ret(C
 };
 
 template <typename T>
+struct EnumValueInfo {
+    using type = T;
+    constexpr EnumValueInfo(std::string_view name, T value): name(name), value(value) {}
+
+    std::string_view name;
+    T value;
+};
+
+template <typename T>
+struct EnumBaseInfo {
+    using type = T;
+};
+
+template <typename T>
 struct TypeInfo;
+
+template <typename T>
+struct EnumInfo;
 
 // some helper macros for reflect class more easier
 
@@ -195,6 +213,16 @@ struct refl::TypeInfo<clazz>: public TypeInfoBase<clazz>
 #define Field(name, type) refl::FieldInfo<Attrs(void), decltype(type)>(name, type)
 #define AttrField(attrs, name, type) refl::FieldInfo<attrs, decltype(type)>(name, type)
 #define Overload(name, ...) refl::OverloadFuncs(name, __VA_ARGS__)
+
+
+#define ReflEnum(e, enum_type) \
+template <> \
+struct refl::EnumInfo<e>: public refl::EnumBaseInfo<enum_type>
+
+#define Values(...) static constexpr std::array values = {__VA_ARGS__};
+
+#define Value(name, value) refl::EnumValueInfo<int>(name, value)
+
 
 //! @brief a help structure for check if field is overload function
 template <typename T>

@@ -2,6 +2,7 @@
 #define SOL_ALL_SAFETIES_ON 1
 #include "sol/sol.hpp"
 #include "refl.hpp"
+#include <utility>
 
 namespace luabind {
 
@@ -28,6 +29,7 @@ void BindClass(sol::state& lua, std::string_view name) {
     }
     _bindFields<ClassInfo>(usertype);
 }
+
 
 template <typename T, typename CtorList>
 struct _CtorBindHelper;
@@ -152,6 +154,19 @@ void _bindOneField(sol::usertype<T>& usertype, const std::tuple<Fields...>& fiel
     if constexpr (Idx + 1 < sizeof...(Fields)) {
         _bindOneField<T, Idx + 1>(usertype, fields);
     }   
+}
+
+
+template <typename T>
+void BindEnum(sol::state& lua, std::string_view name) {
+    using type = refl::EnumInfo<T>;
+    constexpr auto values = type::values;
+    _bindEnum(lua, name, values, std::make_index_sequence<values.size()>());
+}
+
+template <typename T, size_t... Idx>
+void _bindEnum(sol::state& lua, std::string_view name, T values, std::index_sequence<Idx...>) {
+    lua.new_enum(name, {std::pair<std::string_view, int>(values[Idx].name, values[Idx].value)...});
 }
 
 }

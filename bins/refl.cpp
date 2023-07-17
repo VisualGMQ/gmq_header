@@ -31,6 +31,20 @@ ReflClass(TestClass) {
     )
 };
 
+enum MyEnum {
+    Value1 = 123,
+    Value2 = 277,
+    Value3 = 45,
+};
+
+ReflEnum(MyEnum, int) {
+    Values(
+        Value("Value1", MyEnum::Value1),
+        Value("Value2", MyEnum::Value2),
+        Value("Value3", MyEnum::Value3)
+    )
+};
+
 TEST_CASE("reflection") {
     constexpr auto info = refl::TypeInfo<TestClass>();
     static_assert(std::is_same_v<decltype(info)::classType, TestClass>);
@@ -75,5 +89,15 @@ TEST_CASE("reflection") {
 
         constexpr auto overload = std::get<4>(info.fields);
         static_assert(refl::IsOverloadFunctions<std::remove_const_t<decltype(overload)>>::value);
+    }
+
+    SECTION("enum refl") {
+        static_assert(refl::EnumInfo<MyEnum>::values.size() == 3);
+        static_assert(refl::EnumInfo<MyEnum>::values[0].name == "Value1");
+        static_assert(refl::EnumInfo<MyEnum>::values[0].value == MyEnum::Value1);
+        static_assert(refl::EnumInfo<MyEnum>::values[1].name == "Value2");
+        static_assert(refl::EnumInfo<MyEnum>::values[1].value == MyEnum::Value2);
+        static_assert(refl::EnumInfo<MyEnum>::values[2].name == "Value3");
+        static_assert(refl::EnumInfo<MyEnum>::values[2].value == MyEnum::Value3);
     }
 }

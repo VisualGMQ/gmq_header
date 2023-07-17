@@ -29,6 +29,11 @@ struct TestClass final {
     int value;
 };
 
+enum MyEnum {
+    Value1 = 123,
+    Value2 = 45,
+};
+
 ReflClass(TestClass) {
     Constructors(TestClass(int))
     Fields(
@@ -43,10 +48,18 @@ ReflClass(TestClass) {
     )
 };
 
+ReflEnum(MyEnum, int) {
+    Values(
+        Value("Value1", MyEnum::Value1),
+        Value("Value2", MyEnum::Value2),
+    )
+};
+
 int main() {
     sol::state lua;
     lua.open_libraries(sol::lib::base);
     luabind::BindClass<TestClass>(lua, "TestClass");
+    luabind::BindEnum<MyEnum>(lua, "MyEnum");
     lua.script(R"(
         function Test()
             local a = TestClass.new(123)
@@ -61,6 +74,8 @@ int main() {
             if a.foo then
                 a:foo()
             end
+            print(MyEnum.Value1)
+            print(MyEnum.Value2)
         end
     )");
 
@@ -71,5 +86,6 @@ int main() {
 		std::string what = err.what();
 		std::cout << "call failed, sol::error::what() is:" << std::endl << what << std::endl;
 	}
+
     return 0;
 }
