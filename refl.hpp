@@ -262,9 +262,9 @@ struct refl::TypeInfo<clazz>: public refl::TypeInfoBase<clazz>
 template <> \
 struct refl::EnumInfo<e>: public refl::EnumBaseInfo<enum_type>
 
-#define Values(...) static constexpr std::array values = {__VA_ARGS__};
+#define EnumValues(...) static constexpr std::array values = {__VA_ARGS__};
 
-#define Value(name, value) refl::EnumValueInfo<int>(name, value)
+#define EnumValue(name, value) refl::EnumValueInfo<int>(name, value)
 
 
 //! @brief a help structure for check if field is overload function

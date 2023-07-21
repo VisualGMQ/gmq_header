@@ -19,17 +19,6 @@ struct LuaBindName final {
     static constexpr std::string_view name = Helper::name;
 };
 
-template <typename T>
-void BindClass(sol::state& lua, std::string_view name) {
-    sol::usertype<T> usertype;
-    using ClassInfo = refl::TypeInfo<T>;
-    if constexpr(ClassInfo::constructors::size != 0) {
-        ClassInfo classinfo;
-        usertype = std::move(_CtorBindHelper<T, typename refl::Filter<_HasNoRValueRefParamInFunc, ClassInfo::constructors>::type>::BindAndCreate(name, lua));
-    }
-    _bindFields<ClassInfo>(usertype);
-}
-
 
 template <typename T, typename CtorList>
 struct _CtorBindHelper;
@@ -50,7 +39,7 @@ struct _HasRValueRefParam<refl::ElemList<>> {
 
 template <typename F>
 struct _HasNoRValueRefParamInFunc {
-    static constexpr bool value = !_HasRValueRefParam<refl::FuncInfoBase<F>::params>::value;
+    static constexpr bool value = !_HasRValueRefParam<typename refl::FuncInfoBase<F>::params>::value;
 };
 
 template <typename T, typename... Types>
@@ -69,7 +58,7 @@ constexpr auto FilterNoRValueRefFunc(std::tuple<Types...> t) {
         return std::make_tuple();
     } else {
         if constexpr (_HasRValueRefParam<
-                          refl::FuncInfoBase<std::tuple_element_t<
+                          typename refl::FuncInfoBase<std::tuple_element_t<
                               idx, std::tuple<Types...>>>::params>::value) {
             return FilterNoRValueRefFunc<idx + 1>(t);
         } else {
@@ -126,13 +115,6 @@ struct _CtorBindHelper<T, refl::ElemList<Ctors...>> {
     }
 };
 
-template <typename ClassInfo>
-void _bindFields(sol::usertype<typename ClassInfo::classType>& usertype) {
-    if constexpr (std::tuple_size_v<decltype(ClassInfo::fields)>) {
-        _bindOneField<typename ClassInfo::classType, 0>(usertype, ClassInfo::fields);
-    }
-}
-
 template <typename T, typename... Funcs>
 void _bindOverloadFuncs(sol::usertype<T>& usertype, const std::tuple<Funcs...>& funcs, std::string_view name) {
     if constexpr (std::tuple_size_v<std::tuple<Funcs...>> > 0) {
@@ -173,19 +155,19 @@ template <typename T, size_t Idx, typename... Fields>
 void _bindOneField(sol::usertype<T>& usertype, const std::tuple<Fields...>& fields) {
     auto field = std::get<Idx>(fields);
     using type = std::tuple_element_t<Idx, std::tuple<Fields...>>;
-    using high_attr = _GetHighLevelAttr<type::attrs>;
+    using high_attr = _GetHighLevelAttr<typename type::attrs>;
     constexpr auto attr = high_attr::value;
     if constexpr (attr != _AttrType::NoBind) {
         // detect convertable name
         std::string_view name = field.name;
+        auto operatorName = _getOperatorLuaName(name, 1 /*, params::size != 0*/);
+        if (operatorName.has_value()) {
+            name = operatorName.value();
+        }
         if constexpr (!refl::IsOverloadFunctions<type>::value) {
             if constexpr (std::is_member_function_pointer_v<typename type::pointerType>) {
                 using params = typename type::params;
                 if constexpr (!_HasRValueRefParam<params>::value) {
-                    auto operatorName = _getOperatorLuaName(name, params::size != 0);
-                    if (operatorName.has_value()) {
-                        name = operatorName.value();
-                    }
                 }
             }
         }
@@ -212,6 +194,30 @@ void _bindOneField(sol::usertype<T>& usertype, const std::tuple<Fields...>& fiel
     }   
 }
 
+template <typename ClassInfo>
+void _bindFields(sol::usertype<typename ClassInfo::classType>& usertype) {
+    if constexpr (std::tuple_size_v<decltype(ClassInfo::fields)>) {
+        _bindOneField<typename ClassInfo::classType, 0>(usertype, ClassInfo::fields);
+    }
+}
+
+template <typename T>
+void BindClass(sol::state& lua, std::string_view name) {
+    sol::usertype<T> usertype;
+    using ClassInfo = refl::TypeInfo<T>;
+    using filted_constructors = typename refl::Filter<_HasNoRValueRefParamInFunc, typename ClassInfo::constructors>::type;
+    if constexpr(filted_constructors::size > 0) {
+        usertype = std::move(_CtorBindHelper<T, filted_constructors>::BindAndCreate(name, lua));
+    } else {
+        usertype = std::move(lua.new_usertype<T>(name));
+    }
+    _bindFields<ClassInfo>(usertype);
+}
+
+template <typename T, size_t... Idx>
+void _bindEnum(sol::state& lua, std::string_view name, T values, std::index_sequence<Idx...>) {
+    lua.new_enum(name, {std::pair<std::string_view, int>(values[Idx].name, values[Idx].value)...});
+}
 
 template <typename T>
 void BindEnum(sol::state& lua, std::string_view name) {
@@ -220,9 +226,5 @@ void BindEnum(sol::state& lua, std::string_view name) {
     _bindEnum(lua, name, values, std::make_index_sequence<values.size()>());
 }
 
-template <typename T, size_t... Idx>
-void _bindEnum(sol::state& lua, std::string_view name, T values, std::index_sequence<Idx...>) {
-    lua.new_enum(name, {std::pair<std::string_view, int>(values[Idx].name, values[Idx].value)...});
-}
 
 }

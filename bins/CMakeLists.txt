@@ -23,7 +23,7 @@ AddTest(fp)
 AddTest(refl)
 AddTest(luabind)
 AddTest(serialize)
-target_link_libraries(luabind PRIVATE sol2 lua)
+target_link_libraries(luabind PRIVATE sol2 lua) 
 target_link_libraries(serialize PRIVATE sol2 lua)
 
 if (WIN32)

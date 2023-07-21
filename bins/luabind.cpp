@@ -76,9 +76,9 @@ ReflClass(TestClass) {
 };
 
 ReflEnum(MyEnum, int) {
-    Values(
-        Value("Value1", MyEnum::Value1),
-        Value("Value2", MyEnum::Value2),
+    EnumValues(
+        EnumValue("Value1", MyEnum::Value1),
+        EnumValue("Value2", MyEnum::Value2),
     )
 };
 
