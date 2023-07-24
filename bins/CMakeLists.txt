@@ -23,6 +23,7 @@ AddTest(fp)
 AddTest(refl)
 AddTest(luabind)
 AddTest(serialize)
+AddTest(tweeny)
 target_link_libraries(luabind PRIVATE sol2 lua) 
 target_link_libraries(serialize PRIVATE sol2 lua)
 

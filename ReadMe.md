@@ -24,3 +24,4 @@ cmake --build build
 |luabind|use static reflection and sol2 to auto-bind C++ code to lua|lua, sol and refl.hpp|
 |gogl.hpp|a thin layer for OpenGL 4.3|log.hpp & cgmath.hpp & any opengl loader(glew, glad). Test dependents on glad and glfw(in `3rdlibs/`)|
 |serialize|a serialize/deserialize library for convert class to/from lua|refl.hpp & sol2(under `3rdlibs/`) & log.hpp|
+|tweeny|a eazy to use tween library for game and GUI interaction|None|
