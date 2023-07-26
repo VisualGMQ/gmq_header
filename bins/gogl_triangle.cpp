@@ -8,6 +8,7 @@
 #include <iterator>
 #include <iostream>
 
+using namespace gogl;
 
 struct Context final {
     std::unique_ptr<BufferManager> bufmgr;

@@ -1,6 +1,8 @@
 #include "gogl.hpp"
 #include "GLFW/glfw3.h"
 
+using namespace gogl;
+
 struct Context final {
     std::unique_ptr<BufferManager> bufmgr;
     std::unique_ptr<TextureManager> texmgr;

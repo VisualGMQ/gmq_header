@@ -37,3 +37,6 @@ target_link_libraries(gogl_triangle PRIVATE glad glfw)
 
 AddExample(gogl_compute)
 target_link_libraries(gogl_compute PRIVATE glad glfw)
+
+AddExample(renderer2d)
+target_link_libraries(renderer2d PRIVATE glad glfw)

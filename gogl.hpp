@@ -8,6 +8,8 @@
 
 /******** some macro to make opengl call safer *********/
 
+namespace gogl {
+
 #define _GL_MAX_ERROR 1024
 
 inline void GLClearError() {
@@ -41,11 +43,11 @@ inline const char* GLError2Str(GLenum error) {
 }
 
 #define GL_CALL(expr) do { \
-    GLClearError(); \
+    gogl::GLClearError(); \
     expr; \
     GLenum e = glGetError(); \
     if (e != GL_NO_ERROR) { \
-        LOGE("[GL]: ", GLError2Str(e)); \
+        LOGE("[GL]: ", gogl::GLError2Str(e)); \
     } \
 } while(0)
 
@@ -54,7 +56,7 @@ inline const char* GLError2Str(GLenum error) {
     auto value = expr; \
     GLenum e = glGetError(); \
     if (e != GL_NO_ERROR) { \
-        LOGE("[GL]: ", GLError2Str(e)); \
+        LOGE("[GL]: ", gogl::GLError2Str(e)); \
     } \
     return value; \
 }()
@@ -99,7 +101,7 @@ public:
         GL_CALL(glGetShaderiv(id_, GL_COMPILE_STATUS, &success));
         if(!success) {
             GL_CALL(glGetShaderInfoLog(id_, 1024, NULL, infoLog));
-            LOGF("[GL] :", type2gl(type), " shader compile failed:\r\n", infoLog);
+            LOGF("[GL] :", type2str(type), " shader compile failed:\r\n", infoLog);
         }
     }
 
@@ -269,6 +271,14 @@ public:
         }
     }
 
+    void DrawElements(PrimitiveType type, uint64_t count, GLenum dataType, uint64_t offset) {
+        if (type_ != Type::Graphics) {
+            LOGE("[Shader]: your shader isn't graphics shader");
+        } else {
+            GL_CALL(glDrawElements(Primitive2GL(type), count, dataType, (void*)offset));
+        }
+    }
+
     void DispatchCompute(uint64_t x, uint64_t y, uint64_t z) {
         if (type_ != Type::Compute) {
             LOGE("[Shader]: your shader isn't graphics shader");
@@ -393,7 +403,7 @@ public:
         GL_CALL(glDeleteBuffers(1, &id_));
     }
 
-    void SetData(void* datas, size_t size) {
+    void SetData(const void* datas, size_t size) {
         Bind();
         GL_CALL(glBufferData(BufferType2GL(type_), size, datas, GL_STATIC_DRAW));
     }
@@ -549,13 +559,20 @@ enum class Format {
 
 class Texture final {
 public:
+    static auto Null() {
+        return Texture{};
+    }
+
     enum class Type {
+        Null = -1,  // null texture
         Dimension2 = GL_TEXTURE_2D,
         // TODO: do other type support later
         // Dimension3 = GL_TEXTURE_3D,
     };
 
-    Texture(Type type, void* pixels, int w, int h, const Sampler& sampler, Format out, Format inner): type_(type) {
+    Texture(Type type, void* pixels, int w, int h, const Sampler& sampler,
+            Format out, Format inner)
+        : type_(type), w_(w), h_(h) {
         GL_CALL(glGenTextures(1, &id_));
         Bind();
         if (sampler.wrapper.s) {
@@ -600,13 +617,28 @@ public:
     Texture(const Texture&) = delete;
     Texture& operator=(const Texture&) = delete;
 
+    bool operator==(const Texture& o) const {
+        return id_ == o.id_;
+    }
+
+    bool operator!=(const Texture& o) const {
+        return !(*this == o);
+    }
+
+    int Width() const { return w_; }
+    int Height() const { return h_; }
+
     ~Texture() {
         GL_CALL(glDeleteTextures(1, &id_));
     }
 
 private:
+    Texture(): id_(0), type_(gogl::Texture::Type::Null) {}
+
     GLuint id_;
     Type type_;
+    int w_;
+    int h_;
 };
 
 /************ buffer layout *****************/
@@ -803,3 +835,5 @@ class ShaderManager: public ResManager<Shader> {};
 class BufferManager: public ResManager<Buffer> {};
 class TextureManager: public ResManager<Texture> {};
 class AttrPointerManager: public ResManager<AttributePointer> {};
+
+}

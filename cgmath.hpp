@@ -20,6 +20,18 @@ namespace cgmath {
 #define CGMATH_NUMERIC_TYPE float
 #endif
 
+constexpr CGMATH_NUMERIC_TYPE PI = 3.14159265358979;
+
+template <typename T>
+inline T Rad2Deg(T radians) {
+    return radians * 180.0 / PI;
+}
+
+template <typename T>
+inline T Deg2Rad(T degrees) {
+    return degrees * PI / 180.0;
+}
+
 template <typename T>
 using MustArithmetic = std::enable_if_t<std::is_arithmetic_v<T>>;
 
@@ -31,6 +43,16 @@ class Mat;
 using Vec2 = Vec<CGMATH_NUMERIC_TYPE, 2>;
 using Vec3 = Vec<CGMATH_NUMERIC_TYPE, 3>;
 using Vec4 = Vec<CGMATH_NUMERIC_TYPE, 4>;
+
+template <typename T, unsigned int N>
+std::ostream& operator<<(std::ostream& o, const Vec<T, N>& v) {
+    o << "Vec" << N << "(";
+    for (int i = 0; i < N; i++) {
+        o << v.data[i] << " ";
+    }
+    o << ")";
+    return o;
+}
 
 template <typename T, unsigned int N>
 Vec<T, N> operator+(const Vec<T, N>&, const Vec<T, N>&);
@@ -273,9 +295,8 @@ template <typename T>
 class Vec<T, 2> final {
  public:
     union {
-        struct {
-            T x, y;
-        };
+        struct { T x, y; };
+        struct { T w, h; };
         T data[2];
     };
 
@@ -334,9 +355,8 @@ template <typename T>
 class Vec<T, 3> final {
  public:
     union {
-        struct {
-            T x, y, z;
-        };
+        struct { T x, y, z; };
+        struct { T r, s, t; };
         T data[3];
     };
 
@@ -397,9 +417,8 @@ template <typename T>
 class Vec<T, 4> final {
  public:
     union {
-        struct {
-            T x, y, z, w;
-        };
+        struct { T x, y, z, w; };
+        struct { T r, g, b, a; };
         T data[4];
     };
 
@@ -531,7 +550,7 @@ class Mat {
 
         Mat mat = Zeros();
         for (int i = 0; i < Row; i++) {
-            mat.data[i, i] = 1;
+            mat.Set(i, i, 1);
         }
         return mat;
     }
@@ -675,5 +694,97 @@ auto Transpose(const Mat<T, Col, Row>& m) {
 using Mat22 = Mat<CGMATH_NUMERIC_TYPE, 2, 2>;
 using Mat33 = Mat<CGMATH_NUMERIC_TYPE, 3, 3>;
 using Mat44 = Mat<CGMATH_NUMERIC_TYPE, 4, 4>;
+
+inline Mat44 CreateOrtho(float left, float right, float top, float bottom, float near, float far) {
+    return Mat44::FromRow({
+        2.0f / (right - left),                  0.0f,                0.0f, (left + right) / (left - right),
+                         0.0f, 2.0f / (top - bottom),                0.0f, (bottom + top) / (bottom - top),
+                         0.0f,                  0.0f, 2.0f / (far - near),     (near + far) / (near - far),
+                         0.0f,                  0.0f,                0.0f,                            1.0f,
+    });
+}
+
+inline Mat44 CreateTranslation(const Vec3& position) {
+    return Mat44::FromRow({
+        1.0f, 0.0f, 0.0f, position.x,
+        0.0f, 1.0f, 0.0f, position.y,
+        0.0f, 0.0f, 1.0f, position.z,
+        0.0f, 0.0f, 0.0f,        1.0f,
+    });
+}
+
+inline Mat44 CreateZRotation(float radians) {
+    float cos = std::cos(radians);
+    float sin = std::sin(radians);
+    return Mat44::FromRow({
+         cos, -sin, 0.0f, 0.0f,
+         sin,  cos, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    });
+}
+
+inline Mat44 CreateXRotation(float radians) {
+    float cos = std::cos(radians);
+    float sin = std::sin(radians);
+    return Mat44::FromRow({
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f,  cos, -sin, 0.0f,
+        0.0f,  sin,  cos, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    });
+}
+
+inline Mat44 CreateYRotation(float radians) {
+    float cos = std::cos(radians);
+    float sin = std::sin(radians);
+    return Mat44::FromRow({
+         cos, 0.0f,  sin, 0.0f,
+        0.0f, 1.0f,  0.0, 0.0f,
+        -sin, -sin,  cos, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    });
+}
+
+inline Mat44 CreateXYZRotation(const cgmath::Vec3& r) {
+    return CreateXRotation(r.x) *
+           CreateYRotation(r.y) *
+           CreateZRotation(r.z);
+}
+
+inline Mat44 CreateScale(const Vec3& scale) {
+    return Mat44::FromRow({
+        scale.x,     0.0,    0.0f, 0.0f,
+           0.0f, scale.y,    0.0f, 0.0f,
+           0.0f,    0.0f, scale.z, 0.0f,
+           0.0f,    0.0f,    0.0f, 1.0f,
+    });
+}
+
+struct Rect {
+    union {
+        struct { Vec2 position, size; };
+        struct { float x, y, w, h;  };
+    };
+
+    Rect(const Vec2& position, const Vec2& size): position(position), size(size) {}
+    Rect(float x, float y, float w, float h): position({x, y}), size({w, h}) {}
+};
+
+struct SRT final {
+    Vec3 position;
+    Vec3 scale;
+    Vec3 rotation;
+
+    static auto Identity() {
+        return SRT { {}, {}, {} };
+    }
+
+    Mat44 Mat() const {
+        return CreateScale(scale) *
+                CreateXYZRotation(rotation) *
+                CreateTranslation(position);
+    }
+};
 
 }  // namespace cgmath

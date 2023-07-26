@@ -77,7 +77,7 @@ public:
     }
 
     void Step(T step) {
-        if (keyPoints_.size() <= 2) {
+        if (keyPoints_.size() < 2) {
             return;
         }
 
@@ -98,9 +98,9 @@ public:
                 curDur_ = keyPoints_.back().time;
                 loop_ -= loop_ < 0 ? 0 : 1;
             }
-        } else if (curPoint_ + 1 >= keyPoints_.size()) {
-            curPoint_ = keyPoints_.size() - 1;
-            curDur_ = keyPoints_[curPoint_].time;
+        } else if (curPoint_ + 2 >= keyPoints_.size() && curDur_ >= to.time) {
+            curPoint_ = keyPoints_.size() - 2;
+            curDur_ = keyPoints_.back().time;
             if (loop_ != 0) {
                 curPoint_ = 0;
                 curDur_ = 0;
