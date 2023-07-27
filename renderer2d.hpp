@@ -20,9 +20,15 @@ struct Vertex final {
     }
 };
 
-struct Image final {
+struct RectSampler final {
     gogl::Texture* texture = nullptr;
-    std::optional<cgmath::Rect> region;
+    cgmath::Rect region = {0.0, 0.0, 1.0, 1.0};
+};
+
+struct CircleSampler final {
+    gogl::Texture* texture = nullptr;
+    float radius = 0.5;
+    cgmath::Vec2 center = {0.5, 0.5};
 };
 
 class Renderer2D {
@@ -49,6 +55,10 @@ public:
         shader_->SetMat4("Project", cgmath::CreateOrtho(0, size.w, 0.0, size.h, -1.0, 1.0));
     }
 
+    void SetLineWidth(int width) {
+        GL_CALL(glLineWidth(width));
+    }
+
     void SetClearColor(const cgmath::Vec4& color) {
         GL_CALL(glClearColor(color.x, color.y, color.z, color.w));
     }
@@ -58,37 +68,14 @@ public:
     }
 
     template <typename Vertices>
-    void DrawLines(const Vertices& vertices, const gogl::Texture& texture = gogl::Texture::Null()) {
-        vertexBuffer_->Bind();
-        indicesBuffer_->Unbind();
-        vertexBuffer_->SetData((const void*)vertices.data(), sizeof(Vertex) * vertices.size());
-        attrPtr_->Bind();
-        shader_->Use();
-        if (texture == gogl::Texture::Null()) {
-            whiteTexture_->Bind();
-        } else {
-            texture.Bind();
-        }
-        shader_->SetMat4("Model", cgmath::Mat44::Identity());
-        shader_->DrawArray(gogl::PrimitiveType::LineStrip, 0, vertices.size());
+    void DrawLines(const Vertices& vertices) {
+        draw(gogl::PrimitiveType::LineStrip, vertices, std::array<uint32_t, 0>{});
     }
 
     template <typename Vertices>
     void DrawLineLoop(const Vertices& vertices,
-                      const cgmath::Mat44& model = cgmath::Mat44::Identity(),
-                      const gogl::Texture& texture = gogl::Texture::Null()) {
-        vertexBuffer_->Bind();
-        indicesBuffer_->Unbind();
-        vertexBuffer_->SetData((void*)vertices.data(), sizeof(Vertex) * vertices.size());
-        attrPtr_->Bind();
-        shader_->Use();
-        if (texture == gogl::Texture::Null()) {
-            whiteTexture_->Bind();
-        } else {
-            texture.Bind();
-        }
-        shader_->SetMat4("Model", model);
-        shader_->DrawArray(gogl::PrimitiveType::LineLoop, 0, vertices.size());
+                      const cgmath::Mat44& model = cgmath::Mat44::Identity()) {
+        draw(gogl::PrimitiveType::LineLoop, vertices, std::array<uint32_t, 0>{});
     }
 
     void DrawLine(const cgmath::Vec2& p1, const cgmath::Vec2& p2, const cgmath::Vec4& color) {
@@ -99,38 +86,9 @@ public:
     template <typename Vertices, typename Indices>
     void DrawTriangles(Vertices vertices, const Indices& indices,
                        const cgmath::Mat44& model = cgmath::Mat44::Identity(),
-                       const std::optional<Image>& image = std::nullopt) {
-        static_assert(std::is_same_v<Vertices::value_type, Vertex>);
-        static_assert(std::is_same_v<Indices::value_type, uint32_t>);
-        if (indices.empty()) {
-            indicesBuffer_->Unbind();
-        } else {
-            indicesBuffer_->Bind();
-            indicesBuffer_->SetData((void*)indices.data(), sizeof(uint32_t) * indices.size());
-        }
-        if (!image.has_value()) {
-            whiteTexture_->Bind();
-        } else {
-            image->texture->Bind();
-            int w = image->texture->Width();
-            int h = image->texture->Height();
-            const auto& region = image->region;
-            vertices[0].texcoord = region.has_value() ? cgmath::Vec2{region->x / w, region->y / h} : cgmath::Vec2(0.0, 0.0);
-            vertices[1].texcoord = region.has_value() ? cgmath::Vec2{(region->x + region->w) / w, region->y / h} : cgmath::Vec2(1.0, 0.0);
-            vertices[2].texcoord = region.has_value() ? cgmath::Vec2{(region->x + region->w) / w, (region->y + region->h) / h} : cgmath::Vec2(1.0, 1.0);
-            vertices[3].texcoord = region.has_value() ? cgmath::Vec2{region->x / w, (region->y + region->h) / h} : cgmath::Vec2(0.0, 1.0);
-        }
-        vertexBuffer_->Bind();
-        vertexBuffer_->SetData((void*)vertices.data(), sizeof(Vertex) * vertices.size());
-        attrPtr_->Bind();
-        shader_->Use();
-        shader_->SetMat4("Model", model);
-
-        if (indices.empty()) {
-            shader_->DrawArray(gogl::PrimitiveType::Triangles, 0, vertices.size());
-        } else {
-            shader_->DrawElements(gogl::PrimitiveType::Triangles, indices.size(), GL_UNSIGNED_INT, 0);
-        }
+                       const std::optional<RectSampler>& sampler = std::nullopt) {
+        draw(gogl::PrimitiveType::Triangles, vertices, indices, model,
+             sampler ? sampler->texture : nullptr);
     }
 
     void DrawRect(const cgmath::Rect& rect, const cgmath::Vec4& color,
@@ -141,19 +99,100 @@ public:
             Vertex::FromPosColor({rect.x + rect.w, rect.y + rect.h}, color),
             Vertex::FromPosColor({rect.x, rect.y + rect.h}, color),
         };
+
         DrawLineLoop(vertices, model);
     }
 
     void FillRect(const cgmath::Rect& rect, const cgmath::Vec4& color,
                   const cgmath::Mat44& model = cgmath::Mat44::Identity(),
-                  const std::optional<Image>& image = std::nullopt) {
-        const std::array<Vertex, 4> vertices = {
+                  const std::optional<RectSampler>& image = std::nullopt) {
+        std::array<Vertex, 4> vertices = {
             Vertex::FromPosColor({rect.x, rect.y}, color),
             Vertex::FromPosColor({rect.x + rect.w, rect.y}, color),
             Vertex::FromPosColor({rect.x + rect.w, rect.y + rect.h}, color),
             Vertex::FromPosColor({rect.x, rect.y + rect.h}, color),
         };
+        if (image) {
+            const auto& region = image->region;
+            vertices[0].texcoord = cgmath::Vec2{region.x, region.y};
+            vertices[1].texcoord = cgmath::Vec2{region.x + region.w, region.y};
+            vertices[2].texcoord = cgmath::Vec2{region.x + region.w, region.y + region.h};
+            vertices[3].texcoord = cgmath::Vec2{region.x, region.y + region.h};
+        }
+
         DrawTriangles(vertices, std::array<uint32_t, 6>{0, 1, 2, 0, 2, 3}, model, image);
+    }
+
+    void DrawArc(const cgmath::Vec2& center, float radius, float beginDeg, float endDeg, const cgmath::Vec4& color, uint32_t slice = 100) {
+        std::vector<Vertex> vertices(slice);
+        float step = (endDeg - beginDeg) / slice;
+        for (int i = 0; i < slice; i++) {
+            float radians = cgmath::Deg2Rad(beginDeg + step * i);
+            vertices[i].position = cgmath::Vec2{center.x + radius * std::cos(radians),
+                                                center.y + radius * std::sin(radians)};
+            vertices[i].color = color;
+        }
+        DrawLines(vertices);
+    }
+
+    void DrawCircle(const cgmath::Vec2& center, float radius, const cgmath::Vec4& color, uint32_t slice = 100) {
+        std::vector<Vertex> vertices(slice);
+        float step = 2.0 * cgmath::PI / slice;
+        for (int i = 0; i < slice; i++) {
+            float radians = step * i;
+            vertices[i].position = cgmath::Vec2{center.x + radius * std::cos(radians),
+                                                center.y + radius * std::sin(radians)};
+            vertices[i].color = color;
+        }
+        DrawLineLoop(vertices);
+    }
+
+    void FillFan(const cgmath::Vec2 &center,
+                 float radius,
+                 float beginDeg, float endDeg,
+                 const cgmath::Vec4 &color,
+                 const std::optional<CircleSampler>& sampler = std::nullopt,
+                 uint32_t slice = 20) {
+        std::vector<Vertex> vertices(slice);
+        vertices.push_back(Vertex{center, sampler ? sampler->center : cgmath::Vec2{0.0, 0.0}, color});
+        float step = (endDeg - beginDeg) / slice;
+        for (int i = 0; i < slice; i++) {
+            float radians = cgmath::Deg2Rad(beginDeg + step * i);
+            vertices[i].position = cgmath::Vec2{center.x + radius * std::cos(radians),
+                                                center.y + radius * std::sin(radians)};
+            vertices[i].color = color;
+            if (sampler) {
+                cgmath::Vec2 size(sampler->texture->Width(), sampler->texture->Height());
+                vertices[i].texcoord = sampler->center + sampler->radius * cgmath::Vec2{std::cos(radians), std::sin(radians)};
+            }
+        }
+        draw(gogl::PrimitiveType::TriangleFan, vertices, std::array<uint32_t, 0>{}, cgmath::Mat44::Identity(),
+             sampler ? sampler->texture : nullptr);
+    }
+
+    void FillCircle(const cgmath::Vec2& center,
+                    float radius,
+                    const cgmath::Vec4& color,
+                    const std::optional<CircleSampler>& sampler = std::nullopt,
+                    uint32_t slice = 20) {
+        std::vector<Vertex> vertices(slice);
+        vertices.push_back(Vertex{center, sampler ? sampler->center : cgmath::Vec2{0.0, 0.0}, color});
+        float step = 2.0 * cgmath::PI / slice;
+        for (int i = 0; i < slice; i++) {
+            float radians = step * i;
+            vertices[i].position = cgmath::Vec2{center.x + radius * std::cos(radians),
+                                                center.y + radius * std::sin(radians)};
+            vertices[i].color = color;
+            if (sampler) {
+                cgmath::Vec2 size(sampler->texture->Width(), sampler->texture->Height());
+                vertices[i].texcoord = sampler->center + sampler->radius * cgmath::Vec2{std::cos(radians), std::sin(radians)};
+            }
+        }
+        draw(gogl::PrimitiveType::TriangleFan,
+             vertices,
+             std::array<uint32_t, 0>{},
+             cgmath::Mat44::Identity(),
+             sampler ? sampler->texture : nullptr);
     }
 
 private:
@@ -162,6 +201,39 @@ private:
     std::unique_ptr<gogl::Buffer> vertexBuffer_;
     std::unique_ptr<gogl::Buffer> indicesBuffer_;
     std::unique_ptr<gogl::AttributePointer> attrPtr_;
+
+    template <typename Vertices, typename Indices>
+    void draw(gogl::PrimitiveType primitive, Vertices vertices, const Indices& indices,
+                const cgmath::Mat44& model = cgmath::Mat44::Identity(),
+                gogl::Texture* texture = nullptr) {
+        static_assert(std::is_same_v<Vertices::value_type, Vertex>);
+        static_assert(std::is_same_v<Indices::value_type, uint32_t>);
+        if (indices.empty()) {
+            indicesBuffer_->Unbind();
+        } else {
+            indicesBuffer_->Bind();
+            indicesBuffer_->SetData((void*)indices.data(), sizeof(uint32_t) * indices.size());
+        }
+        if (!texture) {
+            whiteTexture_->Bind();
+        } else {
+            texture->Bind();
+            int w = texture->Width();
+            int h = texture->Height();
+        }
+        vertexBuffer_->Bind();
+        vertexBuffer_->SetData((void*)vertices.data(), sizeof(Vertex) * vertices.size());
+        attrPtr_->Bind();
+        shader_->Use();
+        shader_->SetMat4("Model", model);
+
+        if (indices.empty()) {
+            shader_->DrawArray(primitive, 0, vertices.size());
+        } else {
+            shader_->DrawElements(primitive, indices.size(), GL_UNSIGNED_INT, 0);
+        }
+
+    }
 
     std::unique_ptr<gogl::Shader> initShader() {
         gogl::ShaderModule vertexModel(gogl::ShaderModule::Type::Vertex, R"(

@@ -617,6 +617,25 @@ public:
     Texture(const Texture&) = delete;
     Texture& operator=(const Texture&) = delete;
 
+    Texture(Texture&& rhs) {
+        id_ = rhs.id_;
+        type_ = rhs.type_;
+        rhs = Null();
+    }
+
+    Texture& operator=(Texture&& rhs) {
+        if (&rhs == this) {
+            return *this;
+        }
+
+        GL_CALL(glDeleteTextures(1, &id_));
+        id_ = rhs.id_;
+        type_ = rhs.type_;
+        rhs = Null();
+
+        return *this;
+    }
+
     bool operator==(const Texture& o) const {
         return id_ == o.id_;
     }

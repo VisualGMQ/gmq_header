@@ -49,7 +49,10 @@ int main() {
 
         renderer->FillRect(cgmath::Rect{400, 200, 50, 100}, {0, 1, 0, 1},
                            cgmath::CreateZRotation(cgmath::Deg2Rad(15.0f)),
-                           renderer2d::Image{texture.get(), std::nullopt});
+                           renderer2d::RectSampler{texture.get()});
+        renderer->DrawArc(cgmath::Vec2{400, 400}, 100.0, 30.0, 90.0, {0, 0, 1, 1});
+        renderer->FillCircle(cgmath::Vec2{400, 400}, 100.0, {0, 0, 1, 1}, renderer2d::CircleSampler{texture.get()});
+        renderer->FillFan(cgmath::Vec2{400, 400}, 100.0, 30.0, 90.0, {1, 0, 1, 1});
 
         glfwSwapBuffers(window);
     }
