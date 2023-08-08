@@ -21,8 +21,9 @@ cmake --build build
 |net.hpp|a thin layer for Win32 Socket|None|
 |fp.hpp|a functional programming library referenced Haskell & Lisp.Aimed to do compile time algorithm/reflection easier.Has two implementations: pure template and constexpr function|None|
 |refl.hpp|static reflection in compile-time|None|
-|luabind|use static reflection and sol2 to auto-bind C++ code to lua|lua, sol and refl.hpp|
+|luabind.hpp|use static reflection and sol2 to auto-bind C++ code to lua|lua, sol and refl.hpp|
 |gogl.hpp|a thin layer for OpenGL 4.3|log.hpp & cgmath.hpp & any opengl loader(glew, glad). Test dependents on glad and glfw(in `3rdlibs/`)|
 |serialize.hpp|a serialize/deserialize library for convert class to/from lua|refl.hpp & sol2(under `3rdlibs/`) & log.hpp|
 |tweeny.hpp|a eazy to use tween library for game and GUI interaction|None|
 |renderer2d.hpp|a 2D renderer in OpenGL for quickly embed in OpenGL Context|gogl.hpp, cgmath.hpp|
+|signal.hpp|a signal framework referenced by EnTT signal|None, test depends on 3rdlibs/catch2.hpp|
